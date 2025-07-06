@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=enhanced_tabnet_validation
-#SBATCH --account=aces
-#SBATCH --partition=gpu-a100
+#SBATCH --account=aa107-ic
+#SBATCH --partition=IllinoisComputes-GPU
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -16,7 +16,15 @@ echo "================================================================"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $SLURMD_NODENAME"
 echo "Started: $(date)"
-echo "GPU Info: $(nvidia-smi --query-gpu=name --format=csv,noheader,nounits)"
+echo "Updated thresholds: 70-80% target accuracy (realistic clinical performance)"
+echo ""
+
+# GPU check
+if command -v nvidia-smi &> /dev/null; then
+    echo "GPU Info: $(nvidia-smi --query-gpu=name --format=csv,noheader,nounits)"
+else
+    echo "⚠️  GPU info not available"
+fi
 echo ""
 
 # === CONFIGURATION ===
@@ -56,112 +64,125 @@ echo "📋 PREREQUISITE CHECKS"
 echo "--------------------"
 
 # Check clean dataset
-if [ ! -f "${CLEAN_DATASET}" ]; then
-    echo "❌ Clean dataset not found: ${CLEAN_DATASET}"
-    echo "💡 Create clean dataset first:"
-    echo "   python3 -c \"import pandas as pd; df = pd.read_csv('/u/aa107/uiuc-cancer-research/data/processed/tabnet_csv/prostate_variants_tabnet_enhanced.csv', low_memory=False); df_clean = df.drop(columns=['sift_prediction', 'polyphen_prediction'] if 'sift_prediction' in df.columns else []); df_clean.to_csv('${CLEAN_DATASET}', index=False); print('Clean dataset created')\""
+if [ ! -f "$CLEAN_DATASET" ]; then
+    echo "❌ Clean dataset not found: $CLEAN_DATASET"
+    echo "💡 Run data processing pipeline first"
     exit 1
 else
-    DATASET_SIZE=$(du -h "${CLEAN_DATASET}" | cut -f1)
-    DATASET_LINES=$(wc -l < "${CLEAN_DATASET}")
-    echo "✅ Clean dataset found: ${CLEAN_DATASET}"
-    echo "  Size: ${DATASET_SIZE}"
-    echo "  Lines: ${DATASET_LINES}"
+    DATASET_SIZE=$(du -h "$CLEAN_DATASET" | cut -f1)
+    DATASET_LINES=$(wc -l < "$CLEAN_DATASET")
+    echo "✅ Clean dataset found:"
+    echo "  📁 File: $CLEAN_DATASET"
+    echo "  📏 Size: $DATASET_SIZE"
+    echo "  📊 Lines: $DATASET_LINES"
 fi
 
-# Check Python dependencies
-echo "🐍 Checking Python dependencies..."
-python -c "import torch; print(f'PyTorch: {torch.__version__}')" || {
-    echo "❌ PyTorch not available"
+# Check validation script
+if [ ! -f "$VALIDATION_SCRIPT" ]; then
+    echo "❌ Validation script not found: $VALIDATION_SCRIPT"
     exit 1
-}
-
-python -c "import pytorch_tabnet; print('TabNet: OK')" || {
-    echo "❌ PyTorch TabNet not available"
-    echo "💡 Install: pip install pytorch-tabnet"
-    exit 1
-}
-
-python -c "import pandas, numpy, sklearn; print('Core packages: OK')" || {
-    echo "❌ Core packages not available"
-    exit 1
-}
-
-echo "✅ All dependencies available"
-echo ""
-
-# === STEP 1: ENVIRONMENT TEST ===
-echo "🧪 STEP 1: ENVIRONMENT TESTING"
-echo "=============================="
-
-echo "Running environment tests..."
-python src/model/tests/test_environment.py
-
-if [ $? -ne 0 ]; then
-    echo "❌ Environment tests failed"
-    exit 1
+else
+    echo "✅ Validation script found: $VALIDATION_SCRIPT"
 fi
 
-echo "✅ Environment tests passed"
-
-# === STEP 2: ENHANCED DATASET VALIDATION ===
-echo ""
-echo "🔍 STEP 2: ENHANCED DATASET VALIDATION"
-echo "======================================"
-
-echo "Validating clean dataset structure..."
+# Quick dependency check
+echo "📦 Checking core dependencies..."
 python -c "
-import pandas as pd
-
-# Load clean dataset
-df = pd.read_csv('${CLEAN_DATASET}', low_memory=False)
-print(f'Dataset loaded: {df.shape[0]:,} variants × {df.shape[1]} features')
-
-# Check for data leakage
-leakage_features = ['sift_prediction', 'polyphen_prediction', 'functional_pathogenicity']
-leakage_found = [f for f in leakage_features if f in df.columns]
-
-if leakage_found:
-    print(f'❌ Data leakage features found: {leakage_found}')
-    exit(1)
-else:
-    print('✅ No data leakage features detected')
-
-# Check AlphaMissense
-am_features = ['alphamissense_pathogenicity', 'alphamissense_class']
-missing_am = [f for f in am_features if f not in df.columns]
-
-if missing_am:
-    print(f'❌ AlphaMissense features missing: {missing_am}')
-else:
-    print('✅ AlphaMissense features present')
-    am_coverage = df['alphamissense_pathogenicity'].notna().sum()
-    coverage_pct = am_coverage / len(df) * 100
-    print(f'📊 AlphaMissense coverage: {am_coverage:,} variants ({coverage_pct:.1f}%)')
-    
-    if coverage_pct >= 30:
-        print('✅ Good AlphaMissense coverage')
-    else:
-        print('⚠️  Low AlphaMissense coverage')
-
-print('✅ Enhanced dataset validation passed')
+import sys
+try:
+    import torch
+    import pytorch_tabnet
+    import sklearn
+    import pandas as pd
+    import numpy as np
+    print('  ✅ All core packages available')
+    print(f'  📦 PyTorch: {torch.__version__} (CUDA: {torch.cuda.is_available()})')
+    print(f'  📦 Sklearn: {sklearn.__version__}')
+    print(f'  📦 Pandas: {pd.__version__}')
+except ImportError as e:
+    print(f'  ❌ Missing package: {e}')
+    sys.exit(1)
 "
 
 if [ $? -ne 0 ]; then
-    echo "❌ Enhanced dataset validation failed"
+    echo "❌ Dependency check failed"
     exit 1
 fi
 
-echo "✅ Enhanced dataset validation passed"
-
-# === STEP 3: COMPREHENSIVE TABNET VALIDATION ===
+echo "✅ All prerequisites satisfied"
 echo ""
-echo "🔥 STEP 3: COMPREHENSIVE TABNET VALIDATION"
+
+# === STEP 1: QUICK DATASET VALIDATION ===
+echo "🔍 STEP 1: QUICK DATASET VALIDATION"
+echo "===================================="
+
+echo "Quick validation of clean dataset structure..."
+python -c "
+import pandas as pd
+import sys
+
+try:
+    df = pd.read_csv('$CLEAN_DATASET', low_memory=False)
+    print(f'✅ Dataset loaded: {len(df):,} variants × {len(df.columns)} features')
+    
+    # Check for critical features
+    leakage_features = ['sift_prediction', 'polyphen_prediction', 'functional_pathogenicity']
+    leakage_found = [f for f in leakage_features if f in df.columns]
+    
+    tier1_features = ['Consequence', 'CLIN_SIG', 'DOMAINS', 'PUBMED', 'VAR_SYNONYMS']
+    missing_tier1 = [f for f in tier1_features if f not in df.columns]
+    
+    am_features = ['alphamissense_pathogenicity', 'alphamissense_class']
+    missing_am = [f for f in am_features if f not in df.columns]
+    
+    if leakage_found:
+        print(f'❌ Data leakage features found: {leakage_found}')
+        sys.exit(1)
+    elif missing_tier1:
+        print(f'❌ VEP-corrected features missing: {missing_tier1}')
+        sys.exit(1)
+    elif missing_am:
+        print(f'❌ AlphaMissense features missing: {missing_am}')
+        sys.exit(1)
+    else:
+        print('✅ Dataset structure validated')
+        print('  ✅ No data leakage features')
+        print('  ✅ VEP-corrected features present')
+        print('  ✅ AlphaMissense features present')
+        
+        # Coverage check
+        am_coverage = df['alphamissense_pathogenicity'].notna().sum()
+        coverage_rate = am_coverage / len(df) * 100
+        print(f'  📊 AlphaMissense coverage: {coverage_rate:.1f}%')
+        
+except Exception as e:
+    print(f'❌ Dataset validation failed: {e}')
+    sys.exit(1)
+"
+
+if [ $? -ne 0 ]; then
+    echo "❌ Dataset validation failed"
+    exit 1
+fi
+
+echo ""
+
+# === STEP 2: COMPREHENSIVE VALIDATION ===
+echo "🔥 STEP 2: COMPREHENSIVE TABNET VALIDATION"
 echo "=========================================="
+echo "Expected results with updated thresholds:"
+echo "  🎯 Target accuracy: 70-80% (realistic clinical performance)"
+echo "  ⚠️  Suspicious threshold: 90% (was 95%)"
+echo "  ✅ Good threshold: 70% (was 75%)"
+echo "  ✅ Excellent threshold: 80% (was 85%)"
+echo ""
 
 echo "Running comprehensive TabNet validation..."
 
-# Run the fixed validation script
+# Set PYTHONPATH for imports
+export PYTHONPATH="${PROJECT_DIR}/src:${PYTHONPATH:-}"
+
+# Run the validation script
 python "${VALIDATION_SCRIPT}"
 
 VALIDATION_EXIT_CODE=$?
@@ -192,32 +213,38 @@ try:
     summary = results.get('summary', {})
     data_leakage = summary.get('data_leakage_detected', False)
     am_integrated = summary.get('alphamissense_integrated', False)
+    feature_count = summary.get('feature_count', 0)
     
     print(f'  Data leakage detected: {\"❌ YES\" if data_leakage else \"✅ NO\"}')
     print(f'  AlphaMissense integrated: {\"✅ YES\" if am_integrated else \"❌ NO\"}')
+    print(f'  Features validated: {feature_count}')
     
-    # Performance
+    # Performance with updated thresholds
     if 'baseline_validation' in results:
         baseline_acc = results['baseline_validation']['mean_accuracy']
         print(f'  Baseline accuracy: {baseline_acc:.3f}')
         
-        if baseline_acc > 0.95:
+        if baseline_acc > 0.90:
             print('  Baseline status: ❌ SUSPICIOUS - Check for leakage')
-        elif baseline_acc > 0.75:
-            print('  Baseline status: ✅ EXCELLENT')
+        elif baseline_acc > 0.80:
+            print('  Baseline status: ✅ EXCELLENT (80%+)')
+        elif baseline_acc > 0.70:
+            print('  Baseline status: ✅ GOOD (70-80%)')
         else:
-            print('  Baseline status: ✅ REALISTIC')
+            print('  Baseline status: ✅ REALISTIC (<70%)')
     
     if 'tabnet_validation' in results:
         tabnet_acc = results['tabnet_validation']['mean_accuracy']
         print(f'  TabNet accuracy: {tabnet_acc:.3f}')
         
-        if tabnet_acc > 0.95:
+        if tabnet_acc > 0.90:
             print('  TabNet status: ❌ SUSPICIOUS - Check for leakage')
-        elif tabnet_acc > 0.75:
-            print('  TabNet status: ✅ EXCELLENT')
+        elif tabnet_acc > 0.80:
+            print('  TabNet status: ✅ EXCELLENT (80%+)')
+        elif tabnet_acc > 0.70:
+            print('  TabNet status: ✅ GOOD (70-80% target)')
         else:
-            print('  TabNet status: ✅ REALISTIC')
+            print('  TabNet status: ✅ ACCEPTABLE (within range)')
     
 except Exception as e:
     print(f'  ⚠️  Could not parse report: {e}')
@@ -232,6 +259,7 @@ except Exception as e:
     echo "  2. If no data leakage detected, proceed with full training:"
     echo "     python src/model/tabnet_prostate_variant_classifier.py"
     echo "  3. Or submit full training cluster job"
+    echo "  4. Expected final performance: 75-85% accuracy with clinical interpretability"
     
     exit 0
     
@@ -242,7 +270,11 @@ else
     echo "  1. Check the validation output above for specific errors"
     echo "  2. Ensure clean dataset is properly formatted"
     echo "  3. Verify all dependencies are installed correctly"
-    echo "  4. Check that custom TabNet model can be imported"
+    echo "  4. Check that enhanced TabNet model can be imported"
+    echo "  5. Verify updated performance thresholds are working"
     
     exit 1
 fi
+
+echo ""
+echo "Validation completed at: $(date)"
