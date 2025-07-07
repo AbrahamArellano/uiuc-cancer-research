@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-TabNet Attention Pattern Analyzer
+TabNet Attention Pattern Analyzer - CORRECTED VERSION
 Analyzes attention patterns from extracted TabNet weights
 
 Location: /u/aa107/uiuc-cancer-research/src/analysis/attention_analyzer.py
 Author: PhD Research Student, University of Illinois
 
-Purpose: Document objective patterns in TabNet attention without medical interpretation.
-Focus on quantitative differences between pathogenic vs benign attention patterns.
+CRITICAL FIX: Corrected column name mismatch from 'category' to 'classification'
+and added robust data validation and error handling.
 """
 
 import pandas as pd
@@ -60,6 +60,20 @@ class AttentionAnalyzer:
         summary_df = pd.read_csv(summary_file)
         print(f"✅ Loaded summary: {len(summary_df)} variants")
         
+        # Validate that we have the expected column (classification, not category)
+        if 'classification' not in summary_df.columns:
+            print("⚠️  Warning: 'classification' column not found in summary")
+            print(f"📋 Available columns: {list(summary_df.columns)}")
+            # Try to find alternative column names
+            possible_columns = ['category', 'variant_classification', 'class']
+            for col in possible_columns:
+                if col in summary_df.columns:
+                    print(f"📋 Using '{col}' as classification column")
+                    summary_df['classification'] = summary_df[col]
+                    break
+            else:
+                raise ValueError("No classification column found in summary data")
+        
         # Load individual attention files
         attention_files = [f for f in os.listdir(self.attention_dir) if f.endswith('_attention.csv')]
         print(f"🔍 Found {len(attention_files)} attention files")
@@ -70,8 +84,26 @@ class AttentionAnalyzer:
             
             try:
                 attention_df = pd.read_csv(file_path)
-                self.attention_data[variant_id] = attention_df
-                print(f"   ✅ {variant_id}: {len(attention_df)} features")
+                
+                # Process attention data to create global importance scores
+                # Group by feature and calculate average attention across all decision steps
+                if 'attention_weight' in attention_df.columns and 'feature' in attention_df.columns:
+                    global_importance = attention_df.groupby('feature')['attention_weight'].mean().reset_index()
+                    global_importance.columns = ['feature', 'global_importance']
+                    global_importance = global_importance.sort_values('global_importance', ascending=False)
+                    
+                    # Add step-wise attention data
+                    for step in attention_df['decision_step'].unique():
+                        step_data = attention_df[attention_df['decision_step'] == step]
+                        step_col = f'step_{step}_attention'
+                        step_importance = step_data.set_index('feature')['attention_weight']
+                        global_importance[step_col] = global_importance['feature'].map(step_importance).fillna(0)
+                    
+                    self.attention_data[variant_id] = global_importance
+                    print(f"   ✅ {variant_id}: {len(global_importance)} features")
+                else:
+                    print(f"   ⚠️  {variant_id}: Missing required columns")
+                    
             except Exception as e:
                 print(f"   ❌ Error loading {variant_id}: {e}")
         
@@ -81,6 +113,10 @@ class AttentionAnalyzer:
         """Identify feature groups from the data"""
         print("\n🏷️  IDENTIFYING FEATURE GROUPS")
         print("-" * 30)
+        
+        if not self.attention_data:
+            print("❌ No attention data loaded")
+            return None
         
         # Get a sample attention file to analyze features
         sample_data = next(iter(self.attention_data.values()))
@@ -154,11 +190,39 @@ class AttentionAnalyzer:
         print("\n🔍 ANALYZING PATHOGENIC VS BENIGN DIFFERENCES")
         print("-" * 50)
         
+        # Validate and normalize classification values
+        available_classifications = summary_df['classification'].unique()
+        print(f"📋 Available classifications: {available_classifications}")
+        
+        # Map different classification formats to standard names
+        classification_mapping = {}
+        for cls in available_classifications:
+            cls_lower = str(cls).lower()
+            if 'pathogenic' in cls_lower and 'likely' not in cls_lower:
+                classification_mapping[cls] = 'pathogenic'
+            elif 'benign' in cls_lower and 'likely' not in cls_lower:
+                classification_mapping[cls] = 'benign'
+            elif 'likely_pathogenic' in cls_lower or 'likely pathogenic' in cls_lower:
+                classification_mapping[cls] = 'pathogenic'  # Group with pathogenic
+            elif 'likely_benign' in cls_lower or 'likely benign' in cls_lower:
+                classification_mapping[cls] = 'benign'  # Group with benign
+        
+        # Apply mapping
+        summary_df['normalized_classification'] = summary_df['classification'].map(classification_mapping)
+        
         # Separate variants by category
-        pathogenic_variants = summary_df[summary_df['category'] == 'pathogenic']['variant_id'].tolist()
-        benign_variants = summary_df[summary_df['category'] == 'benign']['variant_id'].tolist()
+        pathogenic_variants = summary_df[summary_df['normalized_classification'] == 'pathogenic']['variant_id'].tolist()
+        benign_variants = summary_df[summary_df['normalized_classification'] == 'benign']['variant_id'].tolist()
         
         print(f"📊 Comparing {len(pathogenic_variants)} pathogenic vs {len(benign_variants)} benign variants")
+        
+        if len(pathogenic_variants) == 0 or len(benign_variants) == 0:
+            print("⚠️  Warning: Insufficient data for category comparison")
+            return {
+                'pathogenic_top': [],
+                'benign_top': [],
+                'distinctive_features': []
+            }
         
         # Analyze top features for each category
         pathogenic_features = defaultdict(list)
@@ -195,68 +259,60 @@ class AttentionAnalyzer:
         for i, (feature, importance) in enumerate(benign_top, 1):
             print(f"   {i:2d}. {feature}: {importance:.4f}")
         
-        # Find distinctive features
-        distinctive_features = self._find_distinctive_features(pathogenic_avg, benign_avg)
-        
-        return {
-            'pathogenic_top': pathogenic_top,
-            'benign_top': benign_top,
-            'distinctive_features': distinctive_features,
-            'pathogenic_features': pathogenic_features,
-            'benign_features': benign_features
-        }
-
-    def _find_distinctive_features(self, pathogenic_avg, benign_avg):
-        """Find features that are distinctively important for one category"""
-        print("\n🎯 DISTINCTIVE FEATURES ANALYSIS")
-        print("-" * 35)
-        
+        # Find distinctive features (high in one category, low in another)
         distinctive = []
         all_features = set(pathogenic_avg.keys()) | set(benign_avg.keys())
         
         for feature in all_features:
-            path_imp = pathogenic_avg.get(feature, 0)
-            benign_imp = benign_avg.get(feature, 0)
+            path_imp = pathogenic_avg.get(feature, 0.0001)  # Small value to avoid division by zero
+            benign_imp = benign_avg.get(feature, 0.0001)
             
-            # Calculate difference ratio
-            if max(path_imp, benign_imp) > 0:
-                if path_imp > benign_imp:
-                    ratio = path_imp / (benign_imp + 1e-8)
-                    if ratio > 1.5:  # At least 50% more important
-                        distinctive.append({
-                            'feature': feature,
-                            'category': 'pathogenic',
-                            'path_importance': path_imp,
-                            'benign_importance': benign_imp,
-                            'ratio': ratio
-                        })
-                else:
-                    ratio = benign_imp / (path_imp + 1e-8)
-                    if ratio > 1.5:
-                        distinctive.append({
-                            'feature': feature,
-                            'category': 'benign',
-                            'path_importance': path_imp,
-                            'benign_importance': benign_imp,
-                            'ratio': ratio
-                        })
+            # Calculate ratio (pathogenic / benign)
+            ratio = path_imp / benign_imp
+            
+            # Features distinctive to pathogenic (ratio > 2)
+            if ratio > 2:
+                distinctive.append({
+                    'feature': feature,
+                    'category': 'pathogenic',
+                    'pathogenic_importance': path_imp,
+                    'benign_importance': benign_imp,
+                    'ratio': ratio
+                })
+            # Features distinctive to benign (ratio < 0.5)
+            elif ratio < 0.5:
+                distinctive.append({
+                    'feature': feature,
+                    'category': 'benign',
+                    'pathogenic_importance': path_imp,
+                    'benign_importance': benign_imp,
+                    'ratio': ratio
+                })
         
         # Sort by ratio
         distinctive.sort(key=lambda x: x['ratio'], reverse=True)
         
-        print("📋 Features distinctive to each category:")
+        print("\n📋 Features distinctive to each category:")
         for item in distinctive[:10]:  # Top 10
             cat = item['category'].upper()
             feature = item['feature']
             ratio = item['ratio']
             print(f"   {cat}: {feature} (ratio: {ratio:.2f})")
         
-        return distinctive
+        return {
+            'pathogenic_top': pathogenic_top,
+            'benign_top': benign_top,
+            'distinctive_features': distinctive
+        }
 
     def analyze_feature_group_patterns(self, summary_df):
         """Analyze attention patterns by feature groups"""
         print("\n🏷️  FEATURE GROUP ATTENTION ANALYSIS")
         print("-" * 40)
+        
+        if not self.feature_groups:
+            print("⚠️  No feature groups identified")
+            return {}
         
         group_importance = defaultdict(lambda: defaultdict(list))
         
@@ -266,7 +322,21 @@ class AttentionAnalyzer:
             variant_info = summary_df[summary_df['variant_id'] == variant_id]
             if len(variant_info) == 0:
                 continue
-            category = variant_info.iloc[0]['category']
+                
+            # Use normalized classification if available, otherwise use raw classification
+            if 'normalized_classification' in summary_df.columns:
+                category = variant_info.iloc[0]['normalized_classification']
+            else:
+                category = str(variant_info.iloc[0]['classification']).lower()
+                # Simple normalization
+                if 'pathogenic' in category:
+                    category = 'pathogenic'
+                elif 'benign' in category:
+                    category = 'benign'
+            
+            # Skip if category is not pathogenic or benign
+            if category not in ['pathogenic', 'benign']:
+                continue
             
             # Group features by tier
             for group_name, features in self.feature_groups.items():
@@ -311,6 +381,10 @@ class AttentionAnalyzer:
         print("\n🔄 DECISION STEP ATTENTION ANALYSIS")
         print("-" * 40)
         
+        if not self.attention_data:
+            print("❌ No attention data loaded")
+            return {}
+        
         # Identify how many decision steps we have
         sample_data = next(iter(self.attention_data.values()))
         step_columns = [col for col in sample_data.columns if col.startswith('step_') and col.endswith('_attention')]
@@ -341,7 +415,7 @@ class AttentionAnalyzer:
         # Analyze step consistency
         print("\n📋 Step-wise attention consistency:")
         
-        for variant_id, steps in step_patterns.items():
+        for variant_id, steps in list(step_patterns.items())[:3]:  # Show first 3 examples
             print(f"\n   {variant_id}:")
             
             # Check if same features appear across steps
@@ -364,39 +438,46 @@ class AttentionAnalyzer:
         print("\n📊 CREATING ATTENTION VISUALIZATIONS")
         print("-" * 40)
         
-        # Set style
-        plt.style.use('seaborn-v0_8')
+        try:
+            # Set style
+            plt.style.use('seaborn-v0_8')
+        except:
+            plt.style.use('seaborn')
+        
+        plot_files = []
         
         # 1. Top features comparison plot
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-        
-        # Pathogenic top features
-        path_features = [item[0] for item in category_analysis['pathogenic_top'][:8]]
-        path_importance = [item[1] for item in category_analysis['pathogenic_top'][:8]]
-        
-        ax1.barh(range(len(path_features)), path_importance, color='red', alpha=0.7)
-        ax1.set_yticks(range(len(path_features)))
-        ax1.set_yticklabels([f.replace('_', ' ') for f in path_features], fontsize=10)
-        ax1.set_xlabel('Average Attention Weight')
-        ax1.set_title('Top Features: Pathogenic Variants')
-        ax1.invert_yaxis()
-        
-        # Benign top features
-        benign_features = [item[0] for item in category_analysis['benign_top'][:8]]
-        benign_importance = [item[1] for item in category_analysis['benign_top'][:8]]
-        
-        ax2.barh(range(len(benign_features)), benign_importance, color='green', alpha=0.7)
-        ax2.set_yticks(range(len(benign_features)))
-        ax2.set_yticklabels([f.replace('_', ' ') for f in benign_features], fontsize=10)
-        ax2.set_xlabel('Average Attention Weight')
-        ax2.set_title('Top Features: Benign Variants')
-        ax2.invert_yaxis()
-        
-        plt.tight_layout()
-        plot1_path = os.path.join(self.patterns_dir, "top_features_comparison.png")
-        plt.savefig(plot1_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        print(f"   ✅ Saved: top_features_comparison.png")
+        if category_analysis['pathogenic_top'] and category_analysis['benign_top']:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+            
+            # Pathogenic top features
+            path_features = [item[0] for item in category_analysis['pathogenic_top'][:8]]
+            path_importance = [item[1] for item in category_analysis['pathogenic_top'][:8]]
+            
+            ax1.barh(range(len(path_features)), path_importance, color='red', alpha=0.7)
+            ax1.set_yticks(range(len(path_features)))
+            ax1.set_yticklabels([f.replace('_', ' ') for f in path_features], fontsize=10)
+            ax1.set_xlabel('Average Attention Weight')
+            ax1.set_title('Top Features: Pathogenic Variants')
+            ax1.invert_yaxis()
+            
+            # Benign top features
+            benign_features = [item[0] for item in category_analysis['benign_top'][:8]]
+            benign_importance = [item[1] for item in category_analysis['benign_top'][:8]]
+            
+            ax2.barh(range(len(benign_features)), benign_importance, color='green', alpha=0.7)
+            ax2.set_yticks(range(len(benign_features)))
+            ax2.set_yticklabels([f.replace('_', ' ') for f in benign_features], fontsize=10)
+            ax2.set_xlabel('Average Attention Weight')
+            ax2.set_title('Top Features: Benign Variants')
+            ax2.invert_yaxis()
+            
+            plt.tight_layout()
+            plot1_path = os.path.join(self.patterns_dir, "top_features_comparison.png")
+            plt.savefig(plot1_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"   ✅ Saved: top_features_comparison.png")
+            plot_files.append(plot1_path)
         
         # 2. Feature group comparison plot
         if group_stats:
@@ -424,13 +505,16 @@ class AttentionAnalyzer:
             plt.savefig(plot2_path, dpi=300, bbox_inches='tight')
             plt.close()
             print(f"   ✅ Saved: feature_group_comparison.png")
+            plot_files.append(plot2_path)
         
-        return [plot1_path, plot2_path] if group_stats else [plot1_path]
+        return plot_files
 
     def save_pattern_analysis(self, category_analysis, group_stats, step_patterns):
         """Save detailed pattern analysis results"""
         print("\n💾 SAVING PATTERN ANALYSIS")
         print("-" * 25)
+        
+        analysis_files = []
         
         # Save category differences
         category_file = os.path.join(self.patterns_dir, "pathogenic_vs_benign_patterns.txt")
@@ -458,6 +542,7 @@ class AttentionAnalyzer:
                 f.write(f"{cat}: {feature} (ratio: {ratio:.2f})\n")
         
         print(f"   ✅ Category patterns: pathogenic_vs_benign_patterns.txt")
+        analysis_files.append(category_file)
         
         # Save feature group analysis
         if group_stats:
@@ -475,6 +560,7 @@ class AttentionAnalyzer:
                     f.write(f"   Difference: {stats['difference']:+.4f}\n\n")
             
             print(f"   ✅ Group analysis: feature_group_analysis.txt")
+            analysis_files.append(group_file)
         
         # Save step patterns summary
         step_file = os.path.join(self.patterns_dir, "decision_step_patterns.txt")
@@ -494,8 +580,9 @@ class AttentionAnalyzer:
                 f.write("\n")
         
         print(f"   ✅ Step patterns: decision_step_patterns.txt")
+        analysis_files.append(step_file)
         
-        return category_file, group_file, step_file
+        return analysis_files
 
 def main():
     """Main attention analysis pipeline"""
@@ -543,7 +630,7 @@ def main():
         print(f"📋 Analysis files: {len(analysis_files)} reports")
         
         print(f"\n🎯 Key Findings Preview:")
-        print(f"   - Feature groups analyzed: {len(analyzer.feature_groups)}")
+        print(f"   - Feature groups analyzed: {len(analyzer.feature_groups) if analyzer.feature_groups else 0}")
         print(f"   - Distinctive features found: {len(category_analysis['distinctive_features'])}")
         print(f"   - Decision steps examined: {len(step_patterns)}")
         

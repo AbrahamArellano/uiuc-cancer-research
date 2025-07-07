@@ -1,0 +1,45 @@
+TABNET DECISION STEP ATTENTION PATTERNS
+=============================================
+
+Summary of attention evolution across TabNet decision steps
+
+VARIANT_01:
+   Step 1: af_1kg, is_synonymous, HGVSc
+   Step 2: Consequence, alphamissense_class, BIOTYPE
+   Step 3: PUBMED, BIOTYPE, gnomADe_AFR_AF
+   Step 4: BIOTYPE, PUBMED, gnomADe_AFR_AF
+   Step 5: gnomADe_AFR_AF, BIOTYPE, PUBMED
+   Step 6: VAR_SYNONYMS, Existing_variation, alphamissense_class
+
+VARIANT_02:
+   Step 1: HGVSc, gnomADe_REMAINING_AF, Amino_acids
+   Step 2: Consequence, alphamissense_class, VAR_SYNONYMS
+   Step 3: is_synonymous, BIOTYPE, gnomADe_AFR_AF
+   Step 4: BIOTYPE, is_synonymous, gnomADe_AFR_AF
+   Step 5: gnomADe_AFR_AF, is_synonymous, BIOTYPE
+   Step 6: VAR_SYNONYMS, Existing_variation, alphamissense_class
+
+VARIANT_03:
+   Step 1: HGVSc, gnomADe_SAS_AF, ref_length
+   Step 2: Consequence, alphamissense_class, VAR_SYNONYMS
+   Step 3: PUBMED, BIOTYPE, gnomADe_AFR_AF
+   Step 4: BIOTYPE, PUBMED, gnomADe_AFR_AF
+   Step 5: gnomADe_AFR_AF, BIOTYPE, PUBMED
+   Step 6: VAR_SYNONYMS, Existing_variation, alphamissense_class
+
+VARIANT_04:
+   Step 1: af_1kg, is_synonymous, gnomADe_REMAINING_AF
+   Step 2: Consequence, alphamissense_class, VAR_SYNONYMS
+   Step 3: PUBMED, BIOTYPE, gnomADe_AFR_AF
+   Step 4: BIOTYPE, PUBMED, gnomADe_AFR_AF
+   Step 5: gnomADe_AFR_AF, BIOTYPE, PUBMED
+   Step 6: VAR_SYNONYMS, Existing_variation, alphamissense_class
+
+VARIANT_05:
+   Step 1: HGVSc, EXON, is_lof
+   Step 2: Consequence, alphamissense_class, VAR_SYNONYMS
+   Step 3: PUBMED, BIOTYPE, gnomADe_AFR_AF
+   Step 4: BIOTYPE, PUBMED, gnomADe_AFR_AF
+   Step 5: gnomADe_AFR_AF, BIOTYPE, PUBMED
+   Step 6: VAR_SYNONYMS, Existing_variation, alphamissense_class
+

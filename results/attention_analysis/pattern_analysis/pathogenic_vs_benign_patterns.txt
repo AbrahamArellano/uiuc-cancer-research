@@ -1,0 +1,13 @@
+TABNET ATTENTION PATTERNS: PATHOGENIC VS BENIGN
+============================================================
+
+Analysis Date: 2025-07-07 10:23:38
+
+TOP FEATURES FOR PATHOGENIC VARIANTS:
+----------------------------------------
+
+TOP FEATURES FOR BENIGN VARIANTS:
+----------------------------------------
+
+DISTINCTIVE FEATURES:
+--------------------
