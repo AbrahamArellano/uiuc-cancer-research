@@ -48,6 +48,9 @@ class AttentionExtractor:
         
         self.model = None
         self.feature_names = None
+        self.scaler = None
+        self.label_encoder = None
+        self.actual_feature_names = None
         
         print("🔍 TabNet Attention Extractor Initialized")
         print(f"📁 Model: {self.model_path}")
@@ -63,19 +66,80 @@ class AttentionExtractor:
             raise FileNotFoundError(f"Model not found: {self.model_path}")
         
         try:
-            # Import the model class
-            from model.tabnet_prostate_variant_classifier import ProstateVariantTabNet
+            # Import required modules
+            import torch
+            from pytorch_tabnet.tab_model import TabNetClassifier
             
-            # Create model instance and load
-            self.model = ProstateVariantTabNet()
-            self.model.load_model(self.model_path)
+            # Load model directly from pickle file
+            print("📁 Loading model from pickle file...")
+            with open(self.model_path, 'rb') as f:
+                model_data = pickle.load(f)
+            
+            # Extract the TabNet model
+            if isinstance(model_data, dict) and 'tabnet_model' in model_data:
+                self.model = model_data['tabnet_model']
+                self.feature_names = model_data.get('feature_names', [])
+                self.scaler = model_data.get('scaler', None)
+                self.label_encoder = model_data.get('label_encoder', None)
+                print("✅ Loaded TabNet model from dictionary structure")
+                print(f"📊 Features from pickle: {len(self.feature_names)}")
+                print(f"📊 Scaler available: {self.scaler is not None}")
+                print(f"📊 Label encoder available: {self.label_encoder is not None}")
+            else:
+                # If the pickle file contains the model directly
+                self.model = model_data
+                print("✅ Loaded model directly from pickle")
+                
+                # Load feature names from metadata file
+                metadata_path = self.model_path.replace('.pkl', '_metadata.txt')
+                if os.path.exists(metadata_path):
+                    print(f"📋 Loading feature names from metadata: {metadata_path}")
+                    with open(metadata_path, 'r') as f:
+                        content = f.read()
+                        # Extract feature names from metadata if available
+                        if 'Feature names:' in content:
+                            features_line = [line for line in content.split('\n') if 'Feature names:' in line][0]
+                            self.feature_names = eval(features_line.split('Feature names:')[1].strip())
+                            print(f"✅ Loaded {len(self.feature_names)} feature names from metadata")
+            
+            # Handle device placement after loading
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            print(f"🎯 Target device: {device}")
+            
+            # Move model to appropriate device if needed
+            if hasattr(self.model, 'device_'):
+                current_device = getattr(self.model, 'device_', 'unknown')
+                print(f"📍 Model current device: {current_device}")
+            
+            # For TabNet models, ensure compatibility with current environment
+            if hasattr(self.model, 'to'):
+                print(f"🔄 Moving model to {device}...")
+                self.model = self.model.to(device)
+            elif hasattr(self.model, 'cpu') and device.type == 'cpu':
+                print("🔄 Moving model to CPU...")
+                self.model = self.model.cpu()
+            elif hasattr(self.model, 'cuda') and device.type == 'cuda':
+                print("🔄 Moving model to CUDA...")
+                self.model = self.model.cuda()
             
             print(f"✅ Model loaded successfully")
-            print(f"📊 Features: {len(self.model.feature_names)}")
-            print(f"🎯 Classes: {list(self.model.label_encoder.classes_)}")
-            print(f"🏗️  Architecture: n_d={self.model.n_d}, n_a={self.model.n_a}, n_steps={self.model.n_steps}")
+            print(f"📊 Features: {len(self.feature_names) if self.feature_names else 'Unknown'}")
             
-            self.feature_names = self.model.feature_names
+            # Only load from dataset if no feature names found anywhere
+            if not self.feature_names:
+                print("⚠️  No feature names found - loading from dataset as fallback...")
+                dataset_df = pd.read_csv(self.dataset_path)
+                # Exclude target columns
+                exclude_cols = ['variant_classification', 'CLIN_SIG', 'chromosome', 'position']
+                self.feature_names = [col for col in dataset_df.columns if col not in exclude_cols]
+                print(f"📊 Features loaded from dataset: {len(self.feature_names)}")
+            
+            # Verify model type
+            if hasattr(self.model, 'explain'):
+                print("✅ TabNet explain() method available")
+            else:
+                print("⚠️  Model may not support attention extraction")
+            
             return True
             
         except Exception as e:
@@ -85,147 +149,166 @@ class AttentionExtractor:
             return False
 
     def load_selected_variants(self):
-        """Load the variants selected for analysis"""
+        """Load the selected variants from variant_selector.py"""
         print("\n📋 LOADING SELECTED VARIANTS")
         print("-" * 30)
         
         if not os.path.exists(self.selected_variants_path):
             raise FileNotFoundError(f"Selected variants not found: {self.selected_variants_path}")
         
-        try:
-            selected_df = pd.read_csv(self.selected_variants_path)
-            print(f"✅ Loaded {len(selected_df)} selected variants")
-            
-            # Display selection summary
-            if 'selection_category' in selected_df.columns:
-                category_counts = selected_df['selection_category'].value_counts()
-                print("📊 Variant categories:")
-                for category, count in category_counts.items():
-                    print(f"   {category.title()}: {count}")
-            
-            return selected_df
-            
-        except Exception as e:
-            raise Exception(f"Error loading selected variants: {e}")
+        selected_df = pd.read_csv(self.selected_variants_path)
+        print(f"✅ Loaded {len(selected_df)} selected variants")
+        
+        # Show selection breakdown
+        if 'selection_category' in selected_df.columns:
+            category_counts = selected_df['selection_category'].value_counts()
+            for category, count in category_counts.items():
+                print(f"   {category.title()}: {count}")
+        
+        return selected_df
 
     def prepare_variant_features(self, selected_df):
-        """Prepare feature matrix for the selected variants matching model training"""
+        """Prepare features for the selected variants"""
         print("\n🔧 PREPARING VARIANT FEATURES")
-        print("-" * 30)
+        print("-" * 35)
         
-        # Need to process selected variants the same way as training
-        # This means applying the same encoding and feature selection
+        # Load the full dataset to get features
+        print("📊 Loading full dataset for feature extraction...")
+        full_df = pd.read_csv(self.dataset_path)
         
-        try:
-            # Load full dataset to get proper feature processing
-            full_df = pd.read_csv(self.dataset_path, low_memory=False)
-            print(f"✅ Loaded full dataset: {len(full_df):,} variants")
-            
-            # Get indices of selected variants by matching key features
-            # Using multiple columns to ensure unique matching
-            key_cols = ['chromosome', 'position']
-            if 'reference_allele' in selected_df.columns and 'reference_allele' in full_df.columns:
-                key_cols.append('reference_allele')
-            if 'alternate_allele' in selected_df.columns and 'alternate_allele' in full_df.columns:
-                key_cols.append('alternate_allele')
+        # Check if dataset has categorical features (indicates need for encoding)
+        categorical_cols = full_df.select_dtypes(include=['object']).columns
+        if len(categorical_cols) > 0:
+            print(f"⚠️  Dataset contains {len(categorical_cols)} categorical columns")
+            print("💡 This dataset needs categorical encoding before scaling")
+            print("📋 Expected: Fully preprocessed numeric dataset from training")
+            print("❌ The training pipeline used a different preprocessed dataset")
+            return None, None, None
+        
+        # Create lookup keys for selected variants
+        if 'chromosome' in selected_df.columns and 'position' in selected_df.columns:
+            selected_keys = set(zip(selected_df['chromosome'], selected_df['position']))
             
             # Find matching rows in full dataset
-            selected_indices = []
-            for _, variant in selected_df.iterrows():
-                # Create match condition
-                match_condition = True
-                for col in key_cols:
-                    if col in variant and col in full_df.columns:
-                        match_condition = match_condition & (full_df[col] == variant[col])
-                
-                matched_indices = full_df[match_condition].index.tolist()
-                if matched_indices:
-                    selected_indices.append(matched_indices[0])  # Take first match
-                else:
-                    print(f"⚠️  Warning: Could not find match for variant at {variant.get('chromosome', 'unknown')}:{variant.get('position', 'unknown')}")
+            matching_mask = full_df.apply(
+                lambda row: (row['chromosome'], row['position']) in selected_keys, axis=1
+            )
             
-            if not selected_indices:
-                raise Exception("No matching variants found in full dataset")
-            
-            print(f"✅ Matched {len(selected_indices)} variants in full dataset")
-            
-            # Extract matched variants from full dataset
-            matched_variants = full_df.iloc[selected_indices].copy()
-            
-            # Process features using the same pipeline as training
-            X, y = self.model.load_data()  # This processes the full dataset
-            
-            # Extract the same rows from processed data
-            X_selected = X.iloc[selected_indices].copy()
-            y_selected = y[selected_indices] if y is not None else None
-            
-            print(f"✅ Prepared feature matrix: {X_selected.shape[0]} variants × {X_selected.shape[1]} features")
-            
-            # Verify feature names match
-            if list(X_selected.columns) != self.feature_names:
-                print("⚠️  Warning: Feature names don't match exactly")
-                # Reorder to match training
-                X_selected = X_selected[self.feature_names]
-            
-            return X_selected, y_selected, matched_variants
-            
-        except Exception as e:
-            print(f"❌ Error preparing features: {e}")
-            import traceback
-            traceback.print_exc()
+            matched_df = full_df[matching_mask].copy()
+            print(f"✅ Found {len(matched_df)} matching variants in dataset")
+        else:
+            print("⚠️  No chromosome/position columns - using first N rows")
+            matched_df = full_df.head(len(selected_df)).copy()
+        
+        if len(matched_df) == 0:
+            print("❌ No matching variants found")
             return None, None, None
+        
+        # Prepare features for TabNet - use the exact 56 feature names from training
+        feature_cols = self.feature_names
+        
+        # Check which features exist in the dataset
+        available_features = [col for col in feature_cols if col in matched_df.columns]
+        missing_features = [col for col in feature_cols if col not in matched_df.columns]
+        
+        if missing_features:
+            print(f"⚠️  Missing {len(missing_features)} features in dataset:")
+            for feat in missing_features[:5]:  # Show first 5 missing
+                print(f"     - {feat}")
+            if len(missing_features) > 5:
+                print(f"     ... and {len(missing_features) - 5} more")
+            print(f"📊 Using {len(available_features)} available features")
+            feature_cols = available_features
+        
+        # Extract ALL features (including categorical) - same as training
+        X_selected = matched_df[feature_cols].copy()
+        y_selected = matched_df.get('variant_classification', ['Unknown'] * len(matched_df))
+        
+        # Handle missing values (same as training)
+        X_selected = X_selected.fillna(0)
+        
+        # Apply the EXACT same preprocessing pipeline used during training
+        if self.scaler is not None:
+            print("🔄 Applying trained scaler to preprocessed features...")
+            try:
+                # The scaler expects exactly the same features it was trained on
+                X_scaled = self.scaler.transform(X_selected)
+                X_selected = pd.DataFrame(X_scaled, columns=X_selected.columns, index=X_selected.index)
+                print(f"✅ Features scaled successfully: {X_selected.shape}")
+            except Exception as e:
+                print(f"❌ Scaling failed: {e}")
+                print("💡 This indicates the dataset needs categorical encoding first")
+                return None, None, None
+        else:
+            print("⚠️  No scaler available - using raw features")
+        
+        # Create variant info for tracking
+        variant_info = []
+        for i, (_, row) in enumerate(matched_df.iterrows()):
+            info = {
+                'variant_id': f"variant_{i+1:02d}",
+                'chromosome': row.get('chromosome', 'unknown'),
+                'position': row.get('position', 'unknown'),
+                'gene': row.get('SYMBOL', 'unknown'),
+                'classification': row.get('variant_classification', 'unknown')
+            }
+            variant_info.append(info)
+        
+        print(f"✅ Prepared features: {X_selected.shape}")
+        print(f"📊 Feature columns: {len(X_selected.columns)}")
+        
+        # Update feature names to match the actual features used
+        self.actual_feature_names = list(X_selected.columns)
+        
+        return X_selected, y_selected, variant_info
 
     def extract_attention_weights(self, X_selected, variant_info):
         """Extract attention weights using TabNet's explain function"""
-        print(f"\n🧠 EXTRACTING ATTENTION WEIGHTS")
+        print("\n🧠 EXTRACTING ATTENTION WEIGHTS")
         print("-" * 35)
-        print(f"Processing {len(X_selected)} selected variants across {self.model.n_steps} decision steps")
         
         try:
-            # Get predictions and explanations
-            results = self.model.predict_with_explanation(X_selected, self.feature_names)
+            # Use TabNet's explain function to get attention weights
+            print("🔍 Getting attention weights from TabNet...")
             
-            predictions = results['predictions']
-            explanations = results['explanations']  # Global feature importance
-            attention_masks = results['attention_masks']  # Step-wise attention
+            # Convert to numpy if pandas DataFrame
+            if isinstance(X_selected, pd.DataFrame):
+                X_array = X_selected.values
+            else:
+                X_array = X_selected
             
-            print(f"✅ Extracted attention data:")
-            print(f"   Predictions: {len(predictions)} variants")
-            print(f"   Global explanations shape: {explanations.shape}")
-            print(f"   Attention masks shape: {attention_masks.shape}")
-            print(f"   Decision steps: {attention_masks.shape[0]}")
+            # Get attention weights - this returns masks for each decision step
+            masks, _ = self.model.explain(X_array)
             
-            # Process each variant
+            print(f"✅ Extracted attention for {len(variant_info)} variants")
+            print(f"📊 Decision steps: {len(masks)}")
+            print(f"📊 Mask shape per step: {masks[0].shape}")
+            
+            # Process attention data
             attention_data = []
             
-            for i, (prediction, variant_row) in enumerate(zip(predictions, variant_info.iterrows())):
-                variant_idx, variant = variant_row
-                
-                # Get variant identifier
-                variant_id = f"variant_{i+1:02d}"
-                if 'SYMBOL' in variant:
-                    variant_id += f"_{variant['SYMBOL']}"
-                if 'selection_category' in variant:
-                    variant_id += f"_{variant['selection_category']}"
-                
-                print(f"   Processing {variant_id}: {prediction}")
-                
-                # Extract attention for this variant
+            for variant_idx, variant in enumerate(variant_info):
                 variant_attention = {
-                    'variant_id': variant_id,
-                    'variant_index': i,
-                    'prediction': prediction,
-                    'category': variant.get('selection_category', 'unknown'),
-                    'gene': variant.get('SYMBOL', 'unknown'),
-                    'chromosome': variant.get('chromosome', 'unknown'),
-                    'position': variant.get('position', 'unknown'),
-                    'global_importance': explanations[i],  # Global feature importance for this variant
-                    'step_attention': attention_masks[:, i, :],  # Attention across all steps for this variant
-                    'feature_names': self.feature_names
+                    'variant_info': variant,
+                    'attention_by_step': {}
                 }
+                
+                # Extract attention for each decision step
+                for step_idx, mask in enumerate(masks):
+                    step_attention = mask[variant_idx]  # Attention for this variant at this step
+                    
+                    # Create feature-attention pairs
+                    feature_attention = {}
+                    for feat_idx, attention_weight in enumerate(step_attention):
+                        if feat_idx < len(self.actual_feature_names):
+                            feature_name = self.actual_feature_names[feat_idx]
+                            feature_attention[feature_name] = float(attention_weight)
+                    
+                    variant_attention['attention_by_step'][f'step_{step_idx+1}'] = feature_attention
                 
                 attention_data.append(variant_attention)
             
+            print(f"✅ Processed attention data for all variants")
             return attention_data
             
         except Exception as e:
@@ -235,141 +318,127 @@ class AttentionExtractor:
             return None
 
     def save_attention_data(self, attention_data):
-        """Save attention weights for each variant"""
-        print(f"\n💾 SAVING ATTENTION DATA")
+        """Save attention weights to files"""
+        print("\n💾 SAVING ATTENTION DATA")
         print("-" * 25)
         
         saved_files = []
         
-        try:
-            for variant_data in attention_data:
-                variant_id = variant_data['variant_id']
-                
-                # Save detailed attention data
-                attention_file = os.path.join(self.attention_dir, f"{variant_id}_attention.csv")
-                
-                # Create comprehensive attention DataFrame
-                attention_df = pd.DataFrame({
-                    'feature': variant_data['feature_names'],
-                    'global_importance': variant_data['global_importance']
-                })
-                
-                # Add step-wise attention
-                step_attention = variant_data['step_attention']
-                for step in range(step_attention.shape[0]):
-                    attention_df[f'step_{step+1}_attention'] = step_attention[step, :]
-                
-                # Add variant metadata
-                attention_df['variant_id'] = variant_id
-                attention_df['prediction'] = variant_data['prediction']
-                attention_df['category'] = variant_data['category']
-                attention_df['gene'] = variant_data['gene']
-                
-                # Sort by global importance
-                attention_df = attention_df.sort_values('global_importance', ascending=False)
-                
-                # Save
-                attention_df.to_csv(attention_file, index=False)
-                saved_files.append(attention_file)
-                print(f"   ✅ {variant_id}")
+        # Save individual variant attention files
+        for variant_data in attention_data:
+            variant_info = variant_data['variant_info']
+            variant_id = variant_info['variant_id']
+            gene = variant_info['gene']
+            classification = variant_info['classification']
             
-            # Save summary data
-            summary_file = os.path.join(self.attention_dir, "attention_summary.csv")
+            # Create filename
+            filename = f"{variant_id}_{classification}_{gene}_attention.csv"
+            filepath = os.path.join(self.attention_dir, filename)
             
-            summary_data = []
-            for variant_data in attention_data:
-                # Get top 5 features for each variant
-                top_features_idx = np.argsort(variant_data['global_importance'])[-5:][::-1]
-                top_features = [variant_data['feature_names'][i] for i in top_features_idx]
-                top_importances = variant_data['global_importance'][top_features_idx]
-                
-                summary_data.append({
-                    'variant_id': variant_data['variant_id'],
-                    'prediction': variant_data['prediction'],
-                    'category': variant_data['category'],
-                    'gene': variant_data['gene'],
-                    'top_feature_1': top_features[0],
-                    'top_importance_1': top_importances[0],
-                    'top_feature_2': top_features[1],
-                    'top_importance_2': top_importances[1],
-                    'top_feature_3': top_features[2],
-                    'top_importance_3': top_importances[2],
-                    'top_feature_4': top_features[3],
-                    'top_importance_4': top_importances[3],
-                    'top_feature_5': top_features[4],
-                    'top_importance_5': top_importances[4]
-                })
+            # Prepare data for CSV
+            csv_data = []
+            for step_name, feature_attention in variant_data['attention_by_step'].items():
+                for feature, attention in feature_attention.items():
+                    csv_data.append({
+                        'variant_id': variant_id,
+                        'decision_step': step_name,
+                        'feature': feature,
+                        'attention_weight': attention
+                    })
             
-            summary_df = pd.DataFrame(summary_data)
-            summary_df.to_csv(summary_file, index=False)
-            print(f"   ✅ Summary: attention_summary.csv")
+            # Save to CSV
+            if csv_data:
+                csv_df = pd.DataFrame(csv_data)
+                csv_df.to_csv(filepath, index=False)
+                saved_files.append(filepath)
+                print(f"   ✅ {filename}")
+        
+        # Create summary file
+        summary_data = []
+        for variant_data in attention_data:
+            variant_info = variant_data['variant_info']
             
-            # Save metadata
-            metadata_file = os.path.join(self.attention_dir, "extraction_metadata.txt")
-            with open(metadata_file, 'w') as f:
-                f.write("TABNET ATTENTION EXTRACTION METADATA\n")
-                f.write("=" * 40 + "\n\n")
-                f.write(f"Extraction date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"Model used: {self.model_path}\n")
-                f.write(f"Variants processed: {len(attention_data)}\n")
-                f.write(f"Features analyzed: {len(self.feature_names)}\n")
-                f.write(f"Decision steps: {self.model.n_steps}\n\n")
-                
-                f.write("VARIANT SUMMARY:\n")
-                for variant_data in attention_data:
-                    f.write(f"   {variant_data['variant_id']}: {variant_data['prediction']} ({variant_data['category']})\n")
-                
-                f.write(f"\nFILES CREATED:\n")
-                for file_path in saved_files:
-                    f.write(f"   {os.path.basename(file_path)}\n")
-                f.write(f"   {os.path.basename(summary_file)}\n")
-                
-                f.write(f"\nNEXT STEPS:\n")
-                f.write(f"1. Analyze attention patterns: python src/analysis/attention_analyzer.py\n")
-                f.write(f"2. Generate final results: python src/analysis/results_generator.py\n")
+            # Calculate average attention across all steps for each feature
+            feature_totals = {}
+            step_count = len(variant_data['attention_by_step'])
             
-            print(f"   ✅ Metadata: extraction_metadata.txt")
+            for step_attention in variant_data['attention_by_step'].values():
+                for feature, attention in step_attention.items():
+                    if feature not in feature_totals:
+                        feature_totals[feature] = 0
+                    feature_totals[feature] += attention
             
-            return saved_files, summary_file, metadata_file
+            # Average and get top features
+            avg_attention = {feat: total/step_count for feat, total in feature_totals.items()}
+            top_features = sorted(avg_attention.items(), key=lambda x: x[1], reverse=True)[:10]
             
-        except Exception as e:
-            print(f"❌ Error saving attention data: {e}")
-            return None, None, None
+            summary_data.append({
+                'variant_id': variant_info['variant_id'],
+                'gene': variant_info['gene'],
+                'classification': variant_info['classification'],
+                'top_feature_1': top_features[0][0] if len(top_features) > 0 else '',
+                'top_attention_1': top_features[0][1] if len(top_features) > 0 else 0,
+                'top_feature_2': top_features[1][0] if len(top_features) > 1 else '',
+                'top_attention_2': top_features[1][1] if len(top_features) > 1 else 0,
+                'top_feature_3': top_features[2][0] if len(top_features) > 2 else '',
+                'top_attention_3': top_features[2][1] if len(top_features) > 2 else 0
+            })
+        
+        summary_file = os.path.join(self.attention_dir, "attention_summary.csv")
+        summary_df = pd.DataFrame(summary_data)
+        summary_df.to_csv(summary_file, index=False)
+        print(f"   ✅ attention_summary.csv")
+        
+        # Save metadata
+        metadata = {
+            'extraction_date': datetime.now().isoformat(),
+            'model_path': self.model_path,
+            'variants_processed': len(attention_data),
+            'features_analyzed': len(self.actual_feature_names) if self.actual_feature_names else len(self.feature_names),
+            'decision_steps': len(attention_data[0]['attention_by_step']) if attention_data else 0
+        }
+        
+        metadata_file = os.path.join(self.attention_dir, "extraction_metadata.json")
+        import json
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        print(f"   ✅ extraction_metadata.json")
+        
+        return saved_files, summary_file, metadata_file
 
     def generate_extraction_summary(self, attention_data):
-        """Generate summary of extraction results"""
-        print(f"\n📊 EXTRACTION SUMMARY")
-        print("-" * 20)
+        """Generate a summary of the extraction process"""
+        print(f"\n📋 EXTRACTION SUMMARY")
+        print("-" * 25)
         
-        total_variants = len(attention_data)
-        categories = [v['category'] for v in attention_data]
-        predictions = [v['prediction'] for v in attention_data]
+        if not attention_data:
+            print("❌ No attention data to summarize")
+            return
         
-        print(f"✅ Successfully extracted attention for {total_variants} variants")
+        print(f"✅ Successfully extracted attention for {len(attention_data)} variants")
         
-        # Category breakdown
-        from collections import Counter
-        category_counts = Counter(categories)
-        print(f"📋 Categories:")
-        for category, count in category_counts.items():
-            print(f"   {category.title()}: {count}")
+        # Analyze by classification
+        classifications = {}
+        for variant_data in attention_data:
+            classification = variant_data['variant_info']['classification']
+            if classification not in classifications:
+                classifications[classification] = 0
+            classifications[classification] += 1
         
-        # Prediction breakdown
-        prediction_counts = Counter(predictions)
-        print(f"🎯 Predictions:")
-        for prediction, count in prediction_counts.items():
-            print(f"   {prediction}: {count}")
+        print(f"\n📊 Variants by classification:")
+        for classification, count in classifications.items():
+            print(f"   {classification}: {count}")
         
-        # Feature analysis preview
-        all_importances = np.concatenate([v['global_importance'] for v in attention_data])
-        avg_importance = np.mean(all_importances.reshape(total_variants, -1), axis=0)
-        top_features_idx = np.argsort(avg_importance)[-5:][::-1]
-        
-        print(f"🔝 Top 5 average features across all variants:")
-        for i, idx in enumerate(top_features_idx, 1):
-            feature_name = self.feature_names[idx]
-            importance = avg_importance[idx]
-            print(f"   {i}. {feature_name}: {importance:.4f}")
+        # Analyze feature attention patterns
+        if attention_data:
+            sample_variant = attention_data[0]
+            step_count = len(sample_variant['attention_by_step'])
+            feature_count = len(self.actual_feature_names) if self.actual_feature_names else len(self.feature_names)
+            
+            print(f"\n🧠 Attention analysis details:")
+            print(f"   Decision steps: {step_count}")
+            print(f"   Features per step: {feature_count}")
+            print(f"   Total attention weights: {len(attention_data) * step_count * feature_count}")
 
 def main():
     """Main attention extraction pipeline"""
