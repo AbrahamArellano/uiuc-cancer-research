@@ -214,8 +214,11 @@ class AttentionExtractor:
         # Show selection breakdown
         if 'selection_category' in selected_df.columns:
             category_counts = selected_df['selection_category'].value_counts()
+            print("📊 Classification distribution:")
             for category, count in category_counts.items():
                 print(f"   {category.title()}: {count}")
+        else:
+            print("⚠️  No 'selection_category' column found - this may cause classification issues")
         
         return selected_df
 
@@ -397,21 +400,38 @@ class AttentionExtractor:
         else:
             print("⚠️  No scaler available - using raw encoded features")
         
-        # Create variant info for tracking
+        # CRITICAL FIX: Create variant info with proper classification preservation
         variant_info = []
         for i, (_, row) in enumerate(matched_df.iterrows()):
+            # Get classification from selected_df instead of matched_df
+            if i < len(selected_df) and 'selection_category' in selected_df.columns:
+                classification = selected_df.iloc[i]['selection_category']
+            else:
+                classification = 'unknown'
+            
             info = {
                 'variant_id': f"variant_{i+1:02d}",
                 'chromosome': row.get('chromosome', 'unknown'),
                 'position': row.get('position', 'unknown'),
                 'gene': row.get('SYMBOL', 'unknown'),
-                'classification': row.get('variant_classification', 'unknown')
+                'classification': classification  # FIXED: Now preserves from selected_df
             }
             variant_info.append(info)
+            print(f"   ✅ Prepared {info['variant_id']}: {classification}")
         
         print(f"✅ Prepared features: {X_selected.shape}")
         print(f"📊 Feature columns: {len(X_selected.columns)}")
         print(f"🧮 All features numeric: {X_selected.select_dtypes(include=[np.number]).shape[1] == X_selected.shape[1]}")
+        
+        # Verify classification preservation
+        preserved_classifications = {}
+        for info in variant_info:
+            cls = info['classification']
+            preserved_classifications[cls] = preserved_classifications.get(cls, 0) + 1
+        
+        print(f"🔍 Classification preservation check:")
+        for cls, count in preserved_classifications.items():
+            print(f"   {cls}: {count} variants")
         
         # Update feature names to match the actual features used
         self.actual_feature_names = list(X_selected.columns)
@@ -470,7 +490,7 @@ class AttentionExtractor:
                     variant_attention['attention_by_step'].append(step_attention)
                 
                 attention_data.append(variant_attention)
-                print(f"   ✅ Processed {variant['variant_id']}")
+                print(f"   ✅ Processed {variant['variant_id']}: {variant['classification']}")
             
             print(f"✅ Extracted attention for {len(attention_data)} variants")
             return attention_data
@@ -547,6 +567,12 @@ class AttentionExtractor:
         summary_df.to_csv(summary_file, index=False)
         print(f"   ✅ attention_summary.csv")
         
+        # Verify classification preservation in summary
+        print(f"🔍 Final summary classification verification:")
+        summary_classifications = summary_df['classification'].value_counts()
+        for classification, count in summary_classifications.items():
+            print(f"   {classification}: {count} variants")
+        
         # Save metadata
         metadata = {
             'extraction_date': datetime.now().isoformat(),
@@ -586,6 +612,13 @@ class AttentionExtractor:
         print(f"\n📊 Variants by classification:")
         for classification, count in classifications.items():
             print(f"   {classification}: {count}")
+        
+        # Check for proper classification preservation
+        if len(classifications) == 1 and 'unknown' in str(list(classifications.keys())[0]).lower():
+            print(f"\n❌ CLASSIFICATION PRESERVATION FAILED!")
+            print(f"   All variants still classified as 'unknown'")
+        else:
+            print(f"\n✅ Classification preservation successful!")
         
         # Analyze feature attention patterns
         if attention_data:

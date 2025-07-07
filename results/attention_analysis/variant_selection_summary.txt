@@ -1,7 +1,7 @@
 TABNET ATTENTION ANALYSIS - VARIANT SELECTION SUMMARY
 ============================================================
 
-Generated: 2025-07-07 10:23:29
+Generated: 2025-07-07 11:04:20
 Total variants selected: 16
 
 SELECTION BREAKDOWN:
