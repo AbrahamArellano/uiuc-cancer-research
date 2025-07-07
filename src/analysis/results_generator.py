@@ -606,46 +606,82 @@ class ResultsGenerator:
         return report_file
 
     def create_json_summary(self, validation_results):
-        """Create machine-readable JSON summary"""
-        json_summary = {
-            'analysis_metadata': {
-                'date': datetime.now().isoformat(),
-                'variants_analyzed': len(self.summary_df),
-                'model_accuracy': 0.879,
-                'tabnet_architecture': {
-                    'decision_steps': 6,
-                    'features': 56,
-                    'n_d': 64,
-                    'n_a': 64
+            """Create machine-readable JSON summary - FIXED VERSION"""
+            
+            def convert_to_serializable(obj):
+                """Convert numpy types to Python native types for JSON serialization"""
+                if hasattr(obj, 'dtype'):  # numpy scalar
+                    return obj.item()
+                elif isinstance(obj, dict):
+                    return {k: convert_to_serializable(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_to_serializable(item) for item in obj]
+                elif isinstance(obj, (np.bool_, np.generic)):
+                    return obj.item()
+                return obj
+            
+            # Convert validation_results to ensure JSON compatibility
+            safe_validation_results = convert_to_serializable(validation_results)
+            
+            json_summary = {
+                'analysis_metadata': {
+                    'date': datetime.now().isoformat(),
+                    'variants_analyzed': int(len(self.summary_df)),  # Ensure Python int
+                    'model_accuracy': 0.879,
+                    'tabnet_architecture': {
+                        'decision_steps': 6,
+                        'features': 56,
+                        'n_d': 64,
+                        'n_a': 64
+                    },
+                    'fixes_applied': [
+                        'Fixed Index.mean() AttributeError in Q4 AlphaMissense analysis',
+                        'Enhanced data quality validation and debugging',
+                        'Added comprehensive classification tracking'
+                    ]
                 },
-                'fixes_applied': [
-                    'Fixed Index.mean() AttributeError in Q4 AlphaMissense analysis',
-                    'Enhanced data quality validation and debugging',
-                    'Added comprehensive classification tracking'
-                ]
-            },
-            'validation_results': validation_results,
-            'summary_statistics': {
-                'total_variants': len(self.summary_df),
-                'features_analyzed': 56,
-                'attention_files_processed': len(self.attention_data)
-            },
-            'data_quality': {
-                'classification_issue_detected': validation_results['q1_feature_differences']['answer'] == 'INSUFFICIENT_DATA',
-                'recommendations': [
-                    'Fix attention_extractor.py to preserve selection_category',
-                    'Verify classification preservation in pipeline',
-                    'Re-run complete analysis with proper pathogenic/benign labeling'
-                ]
+                'validation_results': safe_validation_results,
+                'summary_statistics': {
+                    'total_variants': int(len(self.summary_df)),
+                    'features_analyzed': 56,
+                    'attention_files_processed': int(len(self.attention_data))
+                },
+                'data_quality': {
+                    'classification_issue_detected': bool(safe_validation_results['q1_feature_differences']['answer'] == 'INSUFFICIENT_DATA'),
+                    'recommendations': [
+                        'Fix attention_extractor.py to preserve selection_category',
+                        'Verify classification preservation in pipeline',
+                        'Re-run complete analysis with proper pathogenic/benign labeling'
+                    ]
+                }
             }
-        }
-        
-        json_file = os.path.join(self.results_dir, "analysis_summary.json")
-        with open(json_file, 'w') as f:
-            json.dump(json_summary, f, indent=2)
-        
-        print(f"   ✅ JSON summary: analysis_summary.json")
-        return json_file
+            
+            json_file = os.path.join(self.results_dir, "analysis_summary.json")
+            
+            try:
+                with open(json_file, 'w') as f:
+                    json.dump(json_summary, f, indent=2)
+                
+                print(f"   ✅ JSON summary: analysis_summary.json")
+                return json_file
+                
+            except Exception as e:
+                print(f"   ❌ JSON serialization failed: {e}")
+                # Create a simplified fallback version
+                fallback_summary = {
+                    'analysis_metadata': {
+                        'date': datetime.now().isoformat(),
+                        'variants_analyzed': len(self.summary_df),
+                        'status': 'completed_with_serialization_issues'
+                    },
+                    'error_info': str(e)
+                }
+                
+                with open(json_file, 'w') as f:
+                    json.dump(fallback_summary, f, indent=2, default=str)
+                
+                print(f"   ⚠️  Created fallback JSON due to serialization issues")
+                return json_file
 
 def main():
     """Main results generation pipeline"""

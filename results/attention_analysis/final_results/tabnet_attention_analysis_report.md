@@ -1,7 +1,7 @@
 # TabNet Attention Analysis Report
 ## Interpretable Deep Learning for Prostate Cancer Variant Classification
 
-**Analysis Date:** 2025-07-07 11:04:34  
+**Analysis Date:** 2025-07-07 12:59:39  
 **Variants Analyzed:** 45  
 **Model Accuracy:** 87.9% (from training)  
 **TabNet Architecture:** 6 decision steps, 56 features  
