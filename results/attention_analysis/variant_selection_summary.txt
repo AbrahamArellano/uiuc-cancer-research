@@ -1,0 +1,143 @@
+TABNET ATTENTION ANALYSIS - VARIANT SELECTION SUMMARY
+============================================================
+
+Generated: 2025-07-07 05:00:20
+Total variants selected: 16
+
+SELECTION BREAKDOWN:
+   Pathogenic: 8 variants
+   Benign: 8 variants
+
+GENE DIVERSITY:
+   Unique genes: 11
+   Genes represented:
+     BRCA2: 2 variant(s)
+     BRCA1: 2 variant(s)
+     ATM: 2 variant(s)
+     MSH2: 2 variant(s)
+     MSH6: 2 variant(s)
+     MLH1: 1 variant(s)
+     PALB2: 1 variant(s)
+     PTEN: 1 variant(s)
+     TSC2: 1 variant(s)
+     FANCA: 1 variant(s)
+     MTOR: 1 variant(s)
+
+SELECTED VARIANTS PREVIEW:
+
+1. PATHOGENIC VARIANT:
+   chromosome: 13
+   position: 32380024
+   SYMBOL: BRCA2
+   Consequence: frameshift_variant
+   CLIN_SIG: pathogenic
+
+2. PATHOGENIC VARIANT:
+   chromosome: 17
+   position: 43093378
+   SYMBOL: BRCA1
+   Consequence: frameshift_variant
+   CLIN_SIG: pathogenic
+
+3. PATHOGENIC VARIANT:
+   chromosome: 11
+   position: 108320003
+   SYMBOL: ATM
+   Consequence: frameshift_variant
+   CLIN_SIG: pathogenic
+
+4. PATHOGENIC VARIANT:
+   chromosome: 2
+   position: 47414346
+   SYMBOL: MSH2
+   Consequence: frameshift_variant
+   CLIN_SIG: pathogenic
+
+5. PATHOGENIC VARIANT:
+   chromosome: 2
+   position: 47795903
+   SYMBOL: MSH6
+   Consequence: frameshift_variant
+   CLIN_SIG: pathogenic
+
+6. PATHOGENIC VARIANT:
+   chromosome: 3
+   position: 37020404
+   SYMBOL: MLH1
+   Consequence: frameshift_variant
+   CLIN_SIG: likely_pathogenic
+
+7. PATHOGENIC VARIANT:
+   chromosome: 16
+   position: 23623043
+   SYMBOL: PALB2
+   Consequence: frameshift_variant
+   CLIN_SIG: pathogenic
+
+8. PATHOGENIC VARIANT:
+   chromosome: 10
+   position: 87933094
+   SYMBOL: PTEN
+   Consequence: missense_variant
+   CLIN_SIG: pathogenic
+
+9. BENIGN VARIANT:
+   chromosome: 13
+   position: 32332345
+   SYMBOL: BRCA2
+   Consequence: synonymous_variant
+   CLIN_SIG: likely_benign
+
+10. BENIGN VARIANT:
+   chromosome: 11
+   position: 108244845
+   SYMBOL: ATM
+   Consequence: synonymous_variant
+   CLIN_SIG: benign
+
+11. BENIGN VARIANT:
+   chromosome: 17
+   position: 43045843
+   SYMBOL: BRCA1
+   Consequence: intron_variant
+   CLIN_SIG: likely_benign
+
+12. BENIGN VARIANT:
+   chromosome: 16
+   position: 2077626
+   SYMBOL: TSC2
+   Consequence: missense_variant
+   CLIN_SIG: benign
+
+13. BENIGN VARIANT:
+   chromosome: 2
+   position: 47800509
+   SYMBOL: MSH6
+   Consequence: synonymous_variant
+   CLIN_SIG: likely_benign
+
+14. BENIGN VARIANT:
+   chromosome: 16
+   position: 89815863
+   SYMBOL: FANCA
+   Consequence: intron_variant
+   CLIN_SIG: likely_benign
+
+15. BENIGN VARIANT:
+   chromosome: 2
+   position: 47410379
+   SYMBOL: MSH2
+   Consequence: splice_region_variant&intron_variant
+   CLIN_SIG: likely_benign
+
+16. BENIGN VARIANT:
+   chromosome: 1
+   position: 11209387
+   SYMBOL: MTOR
+   Consequence: synonymous_variant
+   CLIN_SIG: likely_benign
+
+NEXT STEPS:
+1. Run attention extraction: python src/analysis/attention_extractor.py
+2. Analyze attention patterns: python src/analysis/attention_analyzer.py
+3. Generate final results: python src/analysis/results_generator.py
