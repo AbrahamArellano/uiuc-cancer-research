@@ -1,8 +1,8 @@
 # TabNet Attention Analysis Report
 ## Interpretable Deep Learning for Prostate Cancer Variant Classification
 
-**Analysis Date:** 2025-07-07 12:59:39  
-**Variants Analyzed:** 45  
+**Analysis Date:** 2025-07-09 01:04:09  
+**Variants Analyzed:** 37  
 **Model Accuracy:** 87.9% (from training)  
 **TabNet Architecture:** 6 decision steps, 56 features  
 
@@ -21,7 +21,7 @@ This analysis demonstrates TabNet's attention mechanisms for prostate cancer var
 
 **Answer:** YES  
 **VEP Features Found:** 135  
-**High Attention Rate:** 31.9%  
+**High Attention Rate:** 51.1%  
 
 ### 3. Q3 Step Consistency
 
@@ -29,9 +29,9 @@ This analysis demonstrates TabNet's attention mechanisms for prostate cancer var
 
 ### 4. Q4 Alphamissense
 
-**Answer:** NO  
+**Answer:** YES  
 **Variants with AlphaMissense:** 45  
-**Average Rank:** 21.3  
+**Average Rank:** 10.4  
 
 ## Technical Validation
 

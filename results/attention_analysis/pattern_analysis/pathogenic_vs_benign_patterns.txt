@@ -1,27 +1,31 @@
 TABNET ATTENTION PATTERNS: PATHOGENIC VS BENIGN
 ============================================================
 
-Analysis Date: 2025-07-07 12:59:37
+Analysis Date: 2025-07-09 01:04:07
 
 TOP FEATURES FOR PATHOGENIC VARIANTS:
 ----------------------------------------
- 1. is_synonymous: 0.2001
- 2. BIOTYPE: 0.1667
- 3. PUBMED: 0.1667
- 4. gnomADe_AFR_AF: 0.1667
- 5. af_1kg: 0.1007
- 6. Consequence: 0.0976
- 7. alphamissense_class: 0.0949
+ 1. VAR_SYNONYMS: 0.2507
+ 2. Consequence: 0.1667
+ 3. is_synonymous: 0.1667
+ 4. EAS_AF: 0.1667
+ 5. gnomADe_REMAINING_AF: 0.1667
+ 6. AFR_AF: 0.1667
+ 7. PHENO: 0.1233
+ 8. is_lof: 0.1157
+ 9. alphamissense_class: 0.0891
 
 TOP FEATURES FOR BENIGN VARIANTS:
 ----------------------------------------
- 1. is_synonymous: 0.1979
- 2. BIOTYPE: 0.1667
- 3. gnomADe_AFR_AF: 0.1667
- 4. PUBMED: 0.1667
- 5. af_1kg: 0.1009
- 6. alphamissense_class: 0.0967
- 7. Consequence: 0.0950
+ 1. VAR_SYNONYMS: 0.2081
+ 2. AFR_AF: 0.1667
+ 3. Consequence: 0.1667
+ 4. is_synonymous: 0.1667
+ 5. gnomADe_REMAINING_AF: 0.1667
+ 6. EAS_AF: 0.1667
+ 7. PHENO: 0.1234
+ 8. alphamissense_class: 0.1145
+ 9. is_lof: 0.1142
 
 DISTINCTIVE FEATURES:
 --------------------

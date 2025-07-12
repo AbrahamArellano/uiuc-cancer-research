@@ -32,7 +32,7 @@ class AttentionExtractor:
         """Initialize attention extractor"""
         if model_path is None:
             # Use the latest model from successful training
-            self.model_path = "/u/aa107/scratch/tabnet_model_20250706_151358.pkl"
+            self.model_path = "/u/aa107/scratch/tabnet_model_20250708_161747.pkl"
         else:
             self.model_path = model_path
             

@@ -283,7 +283,8 @@ def analyze_vcf(vcf_file):
         print("❌ Additional VEP parameter tuning needed")
 
 if __name__ == "__main__":
-    vcf_file = "/u/aa107/uiuc-cancer-research/data/processed/vep/vep_annotated.vcf"
+    #vcf_file = "/u/aa107/uiuc-cancer-research/data/processed/vep/vep_annotated.vcf"
+    vcf_file = "/u/aa107/uiuc-cancer-research/data/processed/tabnet_csv/prostate_variants_tabnet_clean.csv"
     
     try:
         analyze_vcf(vcf_file)

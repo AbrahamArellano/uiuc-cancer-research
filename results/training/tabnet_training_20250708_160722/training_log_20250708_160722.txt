@@ -1,0 +1,182 @@
+🧬 TabNet Prostate Cancer Classifier - ENHANCED VERSION
+============================================================
+✅ 57 VEP-corrected features with clinical interpretability
+🎯 Expected accuracy: 70-80% (realistic clinical performance)
+
+📁 LOADING ENHANCED DATASET...
+✅ Loaded 193,278 variants with 88 columns
+🔧 SELECTING 57 ENHANCED FEATURES...
+✅ Selected 56 features across 8 tiers:
+   tier1_vep_corrected: 4 features
+   tier2_core_vep: 10 features
+   tier3_alphamissense: 2 features
+   tier4_population: 17 features
+   tier5_functional: 6 features
+   tier6_clinical: 5 features
+   tier7_variant_props: 8 features
+   tier8_prostate_biology: 4 features
+🔧 ENCODING CATEGORICAL FEATURES...
+✅ Categorical encoding completed
+🎯 CREATING HIERARCHICAL TARGET VARIABLE...
+✅ Target distribution:
+   Benign: 54,347 (28.1%)
+   Pathogenic: 30,187 (15.6%)
+   VUS: 108,744 (56.3%)
+🔧 PREPARING FEATURES...
+✅ Prepared 56 features for 193,278 samples
+
+📊 Data split:
+   Training: 123,697 variants
+   Validation: 30,925 variants
+   Test: 38,656 variants
+   Features: 56
+🔄 RUNNING 3-FOLD CROSS-VALIDATION...
+   Fold 1/3...
+   Fold 1 accuracy: 0.852
+   Fold 2/3...
+   Fold 2 accuracy: 0.894
+   Fold 3/3...
+   Fold 3 accuracy: 0.895
+📊 Cross-validation results: 0.880 ± 0.020
+🚀 TRAINING TABNET MODEL...
+epoch 0  | loss: 0.6351  | val_accuracy: 0.80475 |  0:00:04s
+epoch 1  | loss: 0.40202 | val_accuracy: 0.86726 |  0:00:08s
+epoch 2  | loss: 0.36414 | val_accuracy: 0.86299 |  0:00:12s
+epoch 3  | loss: 0.3527  | val_accuracy: 0.83188 |  0:00:16s
+epoch 4  | loss: 0.338   | val_accuracy: 0.88252 |  0:00:20s
+epoch 5  | loss: 0.33412 | val_accuracy: 0.88097 |  0:00:24s
+epoch 6  | loss: 0.32804 | val_accuracy: 0.88142 |  0:00:29s
+epoch 7  | loss: 0.32472 | val_accuracy: 0.88443 |  0:00:33s
+epoch 8  | loss: 0.32549 | val_accuracy: 0.88488 |  0:00:37s
+epoch 9  | loss: 0.32021 | val_accuracy: 0.88592 |  0:00:41s
+epoch 10 | loss: 0.32054 | val_accuracy: 0.88747 |  0:00:46s
+epoch 11 | loss: 0.31401 | val_accuracy: 0.88708 |  0:00:50s
+epoch 12 | loss: 0.31389 | val_accuracy: 0.88695 |  0:00:54s
+epoch 13 | loss: 0.31478 | val_accuracy: 0.86163 |  0:00:58s
+epoch 14 | loss: 0.32473 | val_accuracy: 0.88285 |  0:01:02s
+epoch 15 | loss: 0.31105 | val_accuracy: 0.88656 |  0:01:06s
+epoch 16 | loss: 0.30795 | val_accuracy: 0.8843  |  0:01:10s
+epoch 17 | loss: 0.30637 | val_accuracy: 0.89138 |  0:01:14s
+epoch 18 | loss: 0.30264 | val_accuracy: 0.89032 |  0:01:19s
+epoch 19 | loss: 0.30332 | val_accuracy: 0.892   |  0:01:23s
+epoch 20 | loss: 0.30771 | val_accuracy: 0.89245 |  0:01:27s
+epoch 21 | loss: 0.30272 | val_accuracy: 0.88935 |  0:01:31s
+epoch 22 | loss: 0.3017  | val_accuracy: 0.89268 |  0:01:35s
+epoch 23 | loss: 0.3031  | val_accuracy: 0.8898  |  0:01:40s
+epoch 24 | loss: 0.30048 | val_accuracy: 0.89287 |  0:01:44s
+epoch 25 | loss: 0.29724 | val_accuracy: 0.88705 |  0:01:48s
+epoch 26 | loss: 0.29656 | val_accuracy: 0.89439 |  0:01:52s
+epoch 27 | loss: 0.2944  | val_accuracy: 0.89542 |  0:01:56s
+epoch 28 | loss: 0.29119 | val_accuracy: 0.88061 |  0:02:01s
+epoch 29 | loss: 0.29055 | val_accuracy: 0.86108 |  0:02:05s
+epoch 30 | loss: 0.29615 | val_accuracy: 0.88543 |  0:02:09s
+epoch 31 | loss: 0.30824 | val_accuracy: 0.88983 |  0:02:13s
+epoch 32 | loss: 0.29876 | val_accuracy: 0.89542 |  0:02:17s
+epoch 33 | loss: 0.2935  | val_accuracy: 0.89125 |  0:02:21s
+epoch 34 | loss: 0.28895 | val_accuracy: 0.89659 |  0:02:25s
+epoch 35 | loss: 0.2951  | val_accuracy: 0.89109 |  0:02:29s
+epoch 36 | loss: 0.29181 | val_accuracy: 0.89652 |  0:02:34s
+epoch 37 | loss: 0.28679 | val_accuracy: 0.89895 |  0:02:38s
+epoch 38 | loss: 0.28615 | val_accuracy: 0.78632 |  0:02:42s
+epoch 39 | loss: 0.28487 | val_accuracy: 0.89918 |  0:02:46s
+epoch 40 | loss: 0.28203 | val_accuracy: 0.86739 |  0:02:50s
+epoch 41 | loss: 0.28494 | val_accuracy: 0.89542 |  0:02:54s
+epoch 42 | loss: 0.28432 | val_accuracy: 0.89707 |  0:02:59s
+epoch 43 | loss: 0.29551 | val_accuracy: 0.86587 |  0:03:03s
+epoch 44 | loss: 0.2879  | val_accuracy: 0.89643 |  0:03:07s
+epoch 45 | loss: 0.28772 | val_accuracy: 0.89633 |  0:03:11s
+epoch 46 | loss: 0.28566 | val_accuracy: 0.89555 |  0:03:15s
+epoch 47 | loss: 0.28033 | val_accuracy: 0.77976 |  0:03:19s
+epoch 48 | loss: 0.27903 | val_accuracy: 0.7566  |  0:03:24s
+epoch 49 | loss: 0.28567 | val_accuracy: 0.8712  |  0:03:28s
+epoch 50 | loss: 0.29085 | val_accuracy: 0.89814 |  0:03:32s
+epoch 51 | loss: 0.27967 | val_accuracy: 0.89973 |  0:03:36s
+epoch 52 | loss: 0.28033 | val_accuracy: 0.89643 |  0:03:40s
+epoch 53 | loss: 0.27976 | val_accuracy: 0.89717 |  0:03:44s
+epoch 54 | loss: 0.27695 | val_accuracy: 0.90021 |  0:03:48s
+epoch 55 | loss: 0.27413 | val_accuracy: 0.89769 |  0:03:53s
+epoch 56 | loss: 0.27541 | val_accuracy: 0.8993  |  0:03:57s
+epoch 57 | loss: 0.27396 | val_accuracy: 0.89901 |  0:04:01s
+epoch 58 | loss: 0.27122 | val_accuracy: 0.89859 |  0:04:05s
+epoch 59 | loss: 0.27586 | val_accuracy: 0.89821 |  0:04:09s
+epoch 60 | loss: 0.26991 | val_accuracy: 0.80414 |  0:04:14s
+epoch 61 | loss: 0.26622 | val_accuracy: 0.80078 |  0:04:18s
+epoch 62 | loss: 0.26373 | val_accuracy: 0.89313 |  0:04:22s
+epoch 63 | loss: 0.26157 | val_accuracy: 0.79256 |  0:04:26s
+epoch 64 | loss: 0.26319 | val_accuracy: 0.89901 |  0:04:30s
+epoch 65 | loss: 0.25893 | val_accuracy: 0.75887 |  0:04:34s
+epoch 66 | loss: 0.26263 | val_accuracy: 0.89539 |  0:04:39s
+epoch 67 | loss: 0.25976 | val_accuracy: 0.75922 |  0:04:43s
+epoch 68 | loss: 0.25537 | val_accuracy: 0.90057 |  0:04:47s
+epoch 69 | loss: 0.25447 | val_accuracy: 0.83004 |  0:04:51s
+epoch 70 | loss: 0.2533  | val_accuracy: 0.89785 |  0:04:55s
+epoch 71 | loss: 0.25343 | val_accuracy: 0.78739 |  0:05:00s
+epoch 72 | loss: 0.25224 | val_accuracy: 0.89368 |  0:05:04s
+epoch 73 | loss: 0.25065 | val_accuracy: 0.7925  |  0:05:08s
+epoch 74 | loss: 0.25261 | val_accuracy: 0.89681 |  0:05:12s
+epoch 75 | loss: 0.24888 | val_accuracy: 0.89756 |  0:05:16s
+epoch 76 | loss: 0.24828 | val_accuracy: 0.89688 |  0:05:20s
+epoch 77 | loss: 0.24746 | val_accuracy: 0.89846 |  0:05:25s
+epoch 78 | loss: 0.25607 | val_accuracy: 0.89238 |  0:05:29s
+epoch 79 | loss: 0.25331 | val_accuracy: 0.89769 |  0:05:33s
+epoch 80 | loss: 0.24537 | val_accuracy: 0.77691 |  0:05:37s
+epoch 81 | loss: 0.25153 | val_accuracy: 0.88828 |  0:05:41s
+epoch 82 | loss: 0.25234 | val_accuracy: 0.76103 |  0:05:45s
+epoch 83 | loss: 0.2725  | val_accuracy: 0.89584 |  0:05:49s
+epoch 84 | loss: 0.25593 | val_accuracy: 0.89746 |  0:05:54s
+epoch 85 | loss: 0.25221 | val_accuracy: 0.89788 |  0:05:58s
+epoch 86 | loss: 0.24504 | val_accuracy: 0.89866 |  0:06:02s
+epoch 87 | loss: 0.24537 | val_accuracy: 0.88255 |  0:06:06s
+epoch 88 | loss: 0.27534 | val_accuracy: 0.8973  |  0:06:10s
+
+Early stopping occurred at epoch 88 with best_epoch = 68 and best_val_accuracy = 0.90057
+✅ Training completed. Validation accuracy: 0.901
+📊 TEST EVALUATION:
+   Accuracy: 0.899
+
+📋 Classification Report:
+              precision    recall  f1-score   support
+
+      Benign       0.87      0.90      0.88     10870
+  Pathogenic       0.89      0.86      0.88      6037
+         VUS       0.92      0.91      0.91     21749
+
+    accuracy                           0.90     38656
+   macro avg       0.89      0.89      0.89     38656
+weighted avg       0.90      0.90      0.90     38656
+
+📊 Top 10 Most Important Features:
+   VAR_SYNONYMS (tier1_vep_corrected): 0.203
+   SOMATIC (tier6_clinical): 0.108
+   Consequence (tier1_vep_corrected): 0.095
+   Existing_variation (tier2_core_vep): 0.080
+   alphamissense_pathogenicity (tier3_alphamissense): 0.079
+   alphamissense_class (tier3_alphamissense): 0.060
+   is_synonymous (tier7_variant_props): 0.040
+   impact_score (tier5_functional): 0.040
+   is_lof (tier7_variant_props): 0.037
+   AF (tier4_population): 0.036
+
+📊 FEATURE GROUP ANALYSIS:
+========================================
+   tier1_vep_corrected: 0.298 (29.8%) - 4 features
+   tier6_clinical: 0.148 (14.8%) - 5 features
+   tier3_alphamissense: 0.140 (14.0%) - 2 features
+   tier7_variant_props: 0.111 (11.1%) - 8 features
+   tier2_core_vep: 0.110 (11.0%) - 10 features
+   tier4_population: 0.090 (9.0%) - 17 features
+   tier5_functional: 0.078 (7.8%) - 6 features
+   tier8_prostate_biology: 0.025 (2.5%) - 4 features
+✅ Model saved to: /u/aa107/scratch/tabnet_model_20250708_161747.pkl
+✅ Metadata saved to: /u/aa107/scratch/tabnet_model_20250708_161747_metadata.txt
+
+🎯 FINAL RESULTS:
+   Cross-validation: 0.880 ± 0.020
+   Validation accuracy: 0.901
+   Test accuracy: 0.899
+   Model saved: /u/aa107/scratch/tabnet_model_20250708_161747.pkl
+
+🎉 SUCCESS: Achieved target performance!
+   🏆 EXCELLENT: 89.9% accuracy
+
+✅ Training pipeline completed successfully!

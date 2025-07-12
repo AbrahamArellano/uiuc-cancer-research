@@ -1,14 +1,14 @@
 ALPHAMISSENSE FUNCTIONAL ENHANCEMENT REPORT
 =======================================================
 
-Generated: 2025-07-01 19:05:00
+Generated: 2025-07-08 13:47:59
 Input file: prostate_variants_tabnet.csv
 Output file: prostate_variants_tabnet_enhanced.csv
 
 ENHANCEMENT SUMMARY:
 Total variants: 193,278
 AlphaMissense coverage: 83,702 variants (43.3%)
-File size: 153.5 MB
+File size: 163.3 MB
 
 DATA LEAKAGE ELIMINATION:
 ❌ REMOVED artificial features:

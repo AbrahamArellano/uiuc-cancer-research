@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=64GB
+#SBATCH --mem=32G
 #SBATCH --time=02:00:00
 #SBATCH --output=/u/aa107/uiuc-cancer-research/logs/alphamissense_enhancement_%j.out
 #SBATCH --error=/u/aa107/uiuc-cancer-research/logs/alphamissense_enhancement_%j.err

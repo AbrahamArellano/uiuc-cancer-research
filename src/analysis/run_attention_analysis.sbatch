@@ -178,7 +178,8 @@ echo "🧬 PREREQUISITE CHECK"
 echo "-------------------"
 
 # Check if trained model exists
-MODEL_PATH="/u/aa107/scratch/tabnet_model_20250706_151358.pkl"
+#MODEL_PATH="/u/aa107/scratch/tabnet_model_20250706_151358.pkl"
+MODEL_PATH="/u/aa107/scratch/tabnet_model_20250708_161747.pkl"
 if [ ! -f "$MODEL_PATH" ]; then
     echo "❌ Trained TabNet model not found: $MODEL_PATH"
     echo "💡 Train the model first using the training pipeline"

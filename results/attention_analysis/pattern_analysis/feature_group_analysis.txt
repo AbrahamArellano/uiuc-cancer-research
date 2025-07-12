@@ -3,40 +3,40 @@ FEATURE GROUP ATTENTION ANALYSIS
 
 Average attention weights by feature group:
 
-TIER1_VEP_CORRECTED:
-   Pathogenic: 0.0556 ± 0.0218
-   Benign:     0.0499 ± 0.0208
+TIER3_ALPHAMISSENSE:
+   Pathogenic: 0.0503 ± 0.0130
+   Benign:     0.0446 ± 0.0214
    Difference: +0.0057
 
-TIER7_VARIANT_PROPS:
-   Pathogenic: 0.0196 ± 0.0095
-   Benign:     0.0215 ± 0.0095
-   Difference: -0.0019
-
-TIER3_ALPHAMISSENSE:
-   Pathogenic: 0.0474 ± 0.0025
-   Benign:     0.0484 ± 0.0015
-   Difference: -0.0009
-
-TIER6_CLINICAL:
-   Pathogenic: 0.0066 ± 0.0020
-   Benign:     0.0071 ± 0.0021
-   Difference: -0.0005
+TIER5_FUNCTIONAL:
+   Pathogenic: 0.0119 ± 0.0045
+   Benign:     0.0085 ± 0.0066
+   Difference: +0.0034
 
 TIER4_POPULATION:
-   Pathogenic: 0.0127 ± 0.0019
-   Benign:     0.0130 ± 0.0024
-   Difference: -0.0002
+   Pathogenic: 0.0075 ± 0.0043
+   Benign:     0.0099 ± 0.0001
+   Difference: -0.0024
+
+TIER1_VEP_CORRECTED:
+   Pathogenic: 0.0776 ± 0.0208
+   Benign:     0.0767 ± 0.0213
+   Difference: +0.0009
+
+TIER7_VARIANT_PROPS:
+   Pathogenic: 0.0338 ± 0.0046
+   Benign:     0.0332 ± 0.0049
+   Difference: +0.0006
+
+TIER6_CLINICAL:
+   Pathogenic: 0.0241 ± 0.0070
+   Benign:     0.0238 ± 0.0069
+   Difference: +0.0003
 
 TIER2_CORE_VEP:
-   Pathogenic: 0.0260 ± 0.0032
-   Benign:     0.0260 ± 0.0038
+   Pathogenic: 0.0000 ± 0.0000
+   Benign:     0.0000 ± 0.0000
    Difference: +0.0000
-
-TIER5_FUNCTIONAL:
-   Pathogenic: 0.0026 ± 0.0000
-   Benign:     0.0026 ± 0.0000
-   Difference: -0.0000
 
 TIER8_PROSTATE_BIOLOGY:
    Pathogenic: 0.0000 ± 0.0000
