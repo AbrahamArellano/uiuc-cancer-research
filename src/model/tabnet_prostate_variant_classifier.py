@@ -28,10 +28,16 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from pytorch_tabnet.tab_model import TabNetClassifier
-from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler, label_binarize
+from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
+from sklearn.metrics import (
+    balanced_accuracy_score,
+    cohen_kappa_score,
+    f1_score,
+    roc_auc_score,
+)
+from sklearn.preprocessing import label_binarize
+
 
 import torch
 from datetime import datetime
@@ -687,17 +693,124 @@ def main():
         print(f"\n⚠️  MODERATE: {test_accuracy:.1%} accuracy - expected for complex genomic data")
     
     # Evaluate without retraining anything extra
-    evaluate_tabnet_vs_xgboost(
+    # evaluate_tabnet_vs_xgboost(
+    #     tabnet_model=tabnet.model,
+    #     X_train=X_train,
+    #     X_test=X_test,
+    #     y_train=y_train,
+    #     y_test=y_test,
+    #     scaler=tabnet.scaler,
+    #     label_encoder=tabnet.label_encoder
+    # )
+    evaluate_models(
         tabnet_model=tabnet.model,
         X_train=X_train,
         X_test=X_test,
         y_train=y_train,
         y_test=y_test,
         scaler=tabnet.scaler,
-        label_encoder=tabnet.label_encoder
+        label_encoder=tabnet.label_encoder,
+    )
+    return True
+
+# -----------------------------------------------------------------------------
+# Comprehensive evaluation helper
+# -----------------------------------------------------------------------------
+
+def evaluate_models(
+    *,
+    tabnet_model: TabNetClassifier,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    scaler: StandardScaler,
+    label_encoder: LabelEncoder,
+    save_dir: str = os.path.expanduser("~/uiuc-cancer-research/results/metrics"),
+):
+    """Compute Balanced Accuracy, Cohen’s Kappa, Weighted F1, and macro ROC‑AUC
+    for TabNet, Logistic Regression, and XGBoost baselines.
+    """
+
+    # Encode labels
+    y_train_enc = label_encoder.transform(y_train)
+    y_test_enc = label_encoder.transform(y_test)
+    classes = np.arange(len(label_encoder.classes_))
+    y_test_bin = label_binarize(y_test_enc, classes=classes)
+
+    # Ensure correct dtype
+    X_train = np.asarray(X_train, dtype=np.float32)
+    X_test = np.asarray(X_test, dtype=np.float32)
+
+    metrics = {}
+
+    # ---- TabNet ----
+    y_pred_tab = tabnet_model.predict(X_test)
+    proba_tab = tabnet_model.predict_proba(X_test)
+    metrics["TabNet"] = dict(
+        bal_acc=balanced_accuracy_score(y_test_enc, y_pred_tab),
+        kappa=cohen_kappa_score(y_test_enc, y_pred_tab),
+        f1=f1_score(y_test_enc, y_pred_tab, average="weighted"),
+        auc=roc_auc_score(y_test_bin, proba_tab, average="macro", multi_class="ovr"),
     )
 
-    return True
+    # ---- Logistic Regression baseline ----
+    lr = LogisticRegression(
+        multi_class="multinomial",
+        max_iter=1000,
+        n_jobs=-1,
+        solver="lbfgs",
+    )
+    lr.fit(scaler.transform(X_train), y_train_enc)
+    y_pred_lr = lr.predict(scaler.transform(X_test))
+    proba_lr = lr.predict_proba(scaler.transform(X_test))
+    metrics["LogReg"] = dict(
+        bal_acc=balanced_accuracy_score(y_test_enc, y_pred_lr),
+        kappa=cohen_kappa_score(y_test_enc, y_pred_lr),
+        f1=f1_score(y_test_enc, y_pred_lr, average="weighted"),
+        auc=roc_auc_score(y_test_bin, proba_lr, average="macro", multi_class="ovr"),
+    )
+
+    # ---- XGBoost baseline ----
+    xgb = XGBClassifier(
+        n_estimators=600,
+        max_depth=6,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective="multi:softprob",
+        eval_metric="mlogloss",
+        n_jobs=-1,
+        seed=42,
+    )
+    xgb.fit(scaler.transform(X_train), y_train_enc)
+    y_pred_xgb = xgb.predict(scaler.transform(X_test))
+    proba_xgb = xgb.predict_proba(scaler.transform(X_test))
+    metrics["XGBoost"] = dict(
+        bal_acc=balanced_accuracy_score(y_test_enc, y_pred_xgb),
+        kappa=cohen_kappa_score(y_test_enc, y_pred_xgb),
+        f1=f1_score(y_test_enc, y_pred_xgb, average="weighted"),
+        auc=roc_auc_score(y_test_bin, proba_xgb, average="macro", multi_class="ovr"),
+    )
+
+    # ---- Persist metrics ----
+    os.makedirs(save_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fp = os.path.join(save_dir, f"all_metrics_{ts}.txt")
+    with open(fp, "w") as f:
+        f.write("Model\tBalancedAcc\tKappa\tWeightedF1\tMacroAUC\n")
+        for name, m in metrics.items():
+            f.write(f"{name}\t{m['bal_acc']:.4f}\t{m['kappa']:.4f}\t{m['f1']:.4f}\t{m['auc']:.4f}\n")
+    print(f"📁 Metrics saved: {fp}")
+
+    # ---- Console summary ----
+    print("\n📊 COMPARATIVE METRICS")
+    for name, m in metrics.items():
+        print(f"{name:8s} | BalAcc: {m['bal_acc']:.3f} | Kappa: {m['kappa']:.3f} | F1_w: {m['f1']:.3f} | AUC: {m['auc']:.3f}")
+    print()
+
+    return metrics
+
 # -----------------------------------------------------------------------------
 # NEW helper – minimal and self‑contained
 # -----------------------------------------------------------------------------

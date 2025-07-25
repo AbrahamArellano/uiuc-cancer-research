@@ -1,0 +1,4 @@
+Model	BalancedAcc	Kappa	WeightedF1	MacroAUC
+TabNet	0.3320	-0.0029	0.1298	0.4986
+LogReg	0.7033	0.5393	0.7374	0.8610
+XGBoost	0.9059	0.8494	0.9125	0.9778
