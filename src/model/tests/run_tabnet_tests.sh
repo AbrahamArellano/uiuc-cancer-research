@@ -13,7 +13,7 @@ echo "Setting up HPC environment and running tests for VEP-corrected annotations
 echo ""
 
 # === CONFIGURATION ===
-PROJECT_DIR="/u/aa107/uiuc-cancer-research"
+PROJECT_DIR="$HOME/uiuc-cancer-research"
 TEST_SCRIPT="${PROJECT_DIR}/src/model/tests/test_environment.py"
 CONDA_ENV="tabnet-prostate"
 
@@ -118,7 +118,16 @@ fi
 
 # Additional dependencies for enhanced TabNet
 echo "Installing additional dependencies..."
-pip install matplotlib seaborn pathlib --quiet
+pip install matplotlib seaborn --quiet
+
+# Check and install xgboost
+echo "Checking xgboost..."
+if python -c "import xgboost; print(f'  ✅ XGBoost: OK')" 2>/dev/null; then
+    echo "  ✅ XGBoost already installed"
+else
+    echo "  🔨 Installing xgboost..."
+    pip install xgboost
+fi
 
 echo "✅ All dependencies installed/verified"
 echo ""

@@ -28,6 +28,11 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from pytorch_tabnet.tab_model import TabNetClassifier
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler, label_binarize
+from xgboost import XGBClassifier
+
 import torch
 from datetime import datetime
 import warnings
@@ -94,7 +99,7 @@ class ProstateVariantTabNet:
         print("📁 LOADING ENHANCED DATASET...")
         
         # Define data path
-        data_path = "/u/aa107/uiuc-cancer-research/data/processed/tabnet_csv/prostate_variants_tabnet_clean.csv"
+        data_path = os.path.expanduser("~/uiuc-cancer-research/data/processed/tabnet_csv/prostate_variants_tabnet_clean.csv")
         
         if not os.path.exists(data_path):
             print(f"❌ Dataset not found: {data_path}")
@@ -391,6 +396,7 @@ class ProstateVariantTabNet:
             eval_set=[(X_val_scaled, y_val_encoded)],
             eval_name=['val'],
             eval_metric=['accuracy'],
+            # eval_metric=['auc'],  # ✅ now optimizes for ROC-AUC
             max_epochs=100,
             patience=20,
             batch_size=1024,
@@ -650,12 +656,13 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Determine save location based on environment
-    if os.path.exists("/u/aa107/scratch"):
+    scratch_dir = os.path.expanduser("~/scratch")
+    if os.path.exists(scratch_dir):
         # Running in SLURM job - save to scratch first
-        model_path = f"/u/aa107/scratch/tabnet_model_{timestamp}.pkl"
+        model_path = f"{scratch_dir}/tabnet_model_{timestamp}.pkl"
     else:
         # Running locally - save to results directory
-        results_dir = "/u/aa107/uiuc-cancer-research/results/training"
+        results_dir = os.path.expanduser("~/uiuc-cancer-research/results/training")
         os.makedirs(results_dir, exist_ok=True)
         model_path = f"{results_dir}/tabnet_model_{timestamp}.pkl"
     
@@ -679,12 +686,93 @@ def main():
     else:
         print(f"\n⚠️  MODERATE: {test_accuracy:.1%} accuracy - expected for complex genomic data")
     
+    # Evaluate without retraining anything extra
+    evaluate_tabnet_vs_xgboost(
+        tabnet_model=tabnet.model,
+        X_train=X_train,
+        X_test=X_test,
+        y_train=y_train,
+        y_test=y_test,
+        scaler=tabnet.scaler,
+        label_encoder=tabnet.label_encoder
+    )
+
     return True
+# -----------------------------------------------------------------------------
+# NEW helper – minimal and self‑contained
+# -----------------------------------------------------------------------------
+
+def evaluate_tabnet_vs_xgboost(
+    *,
+    tabnet_model: TabNetClassifier,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    scaler: StandardScaler,
+    label_encoder: LabelEncoder,
+    xgb_params: dict | None = None,
+    save_dir: str = os.path.expanduser("~/uiuc-cancer-research/results/metrics"),
+):
+    """Compute macro ROC‑AUC for TabNet & XGBoost, log + persist results."""
+
+    # Ground truth in one‑hot form
+    y_train_enc = label_encoder.transform(y_train)
+    y_test_enc  = label_encoder.transform(y_test)
+    classes     = np.arange(len(label_encoder.classes_))
+    y_test_bin  = label_binarize(y_test_enc, classes=classes)
+
+       # ---- Ensure numpy arrays (PyTorch TabNet balks at pandas DataFrames) ----
+    if isinstance(X_train, pd.DataFrame):
+        X_train = X_train.values
+    if isinstance(X_test, pd.DataFrame):
+        X_test = X_test.values
+
+    X_train = np.asarray(X_train, dtype=np.float32)
+    X_test  = np.asarray(X_test,  dtype=np.float32)
+
+    # ---- TabNet ----
+    proba_tabnet = tabnet_model.predict_proba(X_test)
+    auc_tabnet   = roc_auc_score(y_test_bin, proba_tabnet,
+                                 average="macro", multi_class="ovr")
+
+    # ---- XGBoost baseline ----
+    default_xgb = dict(
+        n_estimators=600, max_depth=6, learning_rate=0.05,
+        subsample=0.8, colsample_bytree=0.8,
+        objective="multi:softprob", eval_metric="mlogloss",
+        n_jobs=-1, seed=42,
+    )
+    if xgb_params:
+        default_xgb.update(xgb_params)
+
+    xgb = XGBClassifier(**default_xgb)
+    xgb.fit(X_train, y_train_enc)
+    proba_xgb = xgb.predict_proba(X_test)
+    auc_xgb   = roc_auc_score(y_test_bin, proba_xgb,
+                              average="macro", multi_class="ovr")
+
+    # ---- Persist ----
+    os.makedirs(save_dir, exist_ok=True)
+    ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_file = os.path.join(save_dir, f"roc_auc_{ts}.txt")
+    with open(out_file, "w") as f:
+        f.write("ROC-AUC Evaluation\n")
+        f.write(f"TabNet_macro_auc: {auc_tabnet:.4f}\n")
+        f.write(f"XGB_macro_auc:   {auc_xgb:.4f}\n")
+    print(f"📁 ROC-AUC metrics saved: {out_file}")
+
+    # ---- Console output in existing style ----
+    print("\n📊 ROC-AUC RESULTS")
+    print(f"   TabNet macro  : {auc_tabnet:.3f}")
+    print(f"   XGBoost macro : {auc_xgb:.3f}\n")
+
+    return {"TabNet_macro_auc": auc_tabnet, "XGB_macro_auc": auc_xgb}
 
 if __name__ == "__main__":
     try:
         success = main()
-        print(f"\n✅ Training pipeline completed successfully!")
+        print(f"\n✅ Training and evaluation pipeline completed successfully!")
     except Exception as e:
         print(f"\n❌ Training failed: {e}")
         import traceback
