@@ -745,14 +745,18 @@ def evaluate_models(
     metrics = {}
 
     # ---- TabNet ----
-    y_pred_tab = tabnet_model.predict(X_test)
-    proba_tab = tabnet_model.predict_proba(X_test)
+    X_test_scaled = scaler.transform(X_test)  
+    y_pred_tab = tabnet_model.predict(X_test_scaled)  # CHANGE X_test to X_test_scaled
+    proba_tab = tabnet_model.predict_proba(X_test_scaled)  # CHANGE X_test to X_test_scaled
     metrics["TabNet"] = dict(
         bal_acc=balanced_accuracy_score(y_test_enc, y_pred_tab),
         kappa=cohen_kappa_score(y_test_enc, y_pred_tab),
         f1=f1_score(y_test_enc, y_pred_tab, average="weighted"),
         auc=roc_auc_score(y_test_bin, proba_tab, average="macro", multi_class="ovr"),
     )
+    # Quick TabNet metrics output
+    print(f"\n📊 TABNET METRICS (IMMEDIATE):")
+    print(f"TabNet | BalAcc: {metrics['TabNet']['bal_acc']:.3f} | Kappa: {metrics['TabNet']['kappa']:.3f} | F1_w: {metrics['TabNet']['f1']:.3f} | AUC: {metrics['TabNet']['auc']:.3f}")
 
     # ---- Logistic Regression baseline ----
     lr = LogisticRegression(

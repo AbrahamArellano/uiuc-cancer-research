@@ -2,12 +2,10 @@
 """
 TabNet Attention Weight Extractor - CORRECTED VERSION
 Extracts attention weights from trained TabNet model for selected variants
+Fixed to match exact 56-feature training configuration
 
 Location: /u/aa107/uiuc-cancer-research/src/analysis/attention_extractor.py
 Author: PhD Research Student, University of Illinois
-
-CRITICAL FIX: Implements complete categorical encoding pipeline from training
-to resolve preprocessing mismatch between training and inference phases.
 """
 
 import pandas as pd
@@ -32,7 +30,7 @@ class AttentionExtractor:
         """Initialize attention extractor"""
         if model_path is None:
             # Use the latest model from successful training
-            self.model_path = "/u/aa107/scratch/tabnet_model_20250708_161747.pkl"
+            self.model_path = "/u/aa107/scratch/tabnet_model_20250727_053446.pkl"
         else:
             self.model_path = model_path
             
@@ -109,6 +107,18 @@ class AttentionExtractor:
             'MODIFIER': 0
         }
         
+        # Initialize 8-tier feature groups
+        self.feature_groups = {
+            'tier1_vep_corrected': [],
+            'tier2_core_vep': [],
+            'tier3_alphamissense': [],
+            'tier4_population': [],
+            'tier5_functional': [],
+            'tier6_clinical': [],
+            'tier7_variant_props': [],
+            'tier8_prostate_biology': []
+        }
+        
         print("🔍 TabNet Attention Extractor Initialized")
         print(f"📁 Model: {self.model_path}")
         print(f"📁 Analysis: {self.analysis_dir}")
@@ -139,69 +149,37 @@ class AttentionExtractor:
                 self.scaler = model_data.get('scaler', None)
                 self.label_encoder = model_data.get('label_encoder', None)
                 print("✅ Loaded TabNet model from dictionary structure")
-                print(f"📊 Features from pickle: {len(self.feature_names)}")
-                print(f"📊 Scaler available: {self.scaler is not None}")
-                print(f"📊 Label encoder available: {self.label_encoder is not None}")
             else:
-                # If the pickle file contains the model directly
+                # Direct model object
                 self.model = model_data
-                print("✅ Loaded model directly from pickle")
-                
-                # Load feature names from metadata file
-                metadata_path = self.model_path.replace('.pkl', '_metadata.txt')
-                if os.path.exists(metadata_path):
-                    print(f"📋 Loading feature names from metadata: {metadata_path}")
-                    with open(metadata_path, 'r') as f:
-                        content = f.read()
-                        # Extract feature names from metadata if available
-                        if 'Feature names:' in content:
-                            features_line = [line for line in content.split('\n') if 'Feature names:' in line][0]
-                            self.feature_names = eval(features_line.split('Feature names:')[1].strip())
-                            print(f"✅ Loaded {len(self.feature_names)} feature names from metadata")
+                print("✅ Loaded TabNet model directly")
             
-            # Handle device placement after loading
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            print(f"🎯 Target device: {device}")
-            
-            # Move model to appropriate device if needed
-            if hasattr(self.model, 'to'):
-                print(f"🔄 Moving model to {device}...")
-                self.model = self.model.to(device)
-            elif hasattr(self.model, 'cpu') and device.type == 'cpu':
-                print("🔄 Moving model to CPU...")
-                self.model = self.model.cpu()
-            elif hasattr(self.model, 'cuda') and device.type == 'cuda':
-                print("🔄 Moving model to CUDA...")
-                self.model = self.model.cuda()
-            
-            print(f"✅ Model loaded successfully")
-            print(f"📊 Features: {len(self.feature_names) if self.feature_names else 'Unknown'}")
-            
-            # Only load from dataset if no feature names found anywhere
-            if not self.feature_names:
-                print("⚠️  No feature names found - loading from dataset as fallback...")
-                dataset_df = pd.read_csv(self.dataset_path)
-                # Exclude target columns
-                exclude_cols = ['variant_classification', 'CLIN_SIG', 'chromosome', 'position']
-                self.feature_names = [col for col in dataset_df.columns if col not in exclude_cols]
-                print(f"📊 Features loaded from dataset: {len(self.feature_names)}")
-            
-            # Verify model type
+            # Verify model has required method
             if hasattr(self.model, 'explain'):
                 print("✅ TabNet explain() method available")
             else:
-                print("⚠️  Model may not support attention extraction")
+                print("❌ TabNet model missing explain() method")
+                return False
+            
+            # Check device
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            print(f"🎯 Target device: {device}")
+            
+            # Display model info
+            print(f"📊 Features from pickle: {len(self.feature_names)}")
+            print(f"📊 Scaler available: {self.scaler is not None}")
+            print(f"📊 Label encoder available: {self.label_encoder is not None}")
             
             return True
             
         except Exception as e:
-            print(f"❌ Error loading model: {e}")
+            print(f"❌ Failed to load model: {e}")
             import traceback
             traceback.print_exc()
             return False
 
     def load_selected_variants(self):
-        """Load the selected variants from variant_selector.py"""
+        """Load variants selected for attention analysis"""
         print("\n📋 LOADING SELECTED VARIANTS")
         print("-" * 30)
         
@@ -211,215 +189,256 @@ class AttentionExtractor:
         selected_df = pd.read_csv(self.selected_variants_path)
         print(f"✅ Loaded {len(selected_df)} selected variants")
         
-        # Show selection breakdown
+        # Check classification distribution
         if 'selection_category' in selected_df.columns:
-            category_counts = selected_df['selection_category'].value_counts()
             print("📊 Classification distribution:")
-            for category, count in category_counts.items():
-                print(f"   {category.title()}: {count}")
-        else:
-            print("⚠️  No 'selection_category' column found - this may cause classification issues")
+            for category, count in selected_df['selection_category'].value_counts().items():
+                print(f"   {category.capitalize()}: {count}")
         
         return selected_df
 
-    def _encode_categorical_features(self, df):
-        """Encode categorical features using the EXACT same logic as training"""
-        print("🔧 APPLYING CATEGORICAL ENCODING (TRAINING PIPELINE)")
-        print("-" * 50)
-        df_encoded = df.copy()
-        
-        # Encode Consequence using severity ranking
-        if 'Consequence' in df.columns:
-            print("🔹 Encoding Consequence with severity rankings...")
-            df_encoded['Consequence_encoded'] = df['Consequence'].map(
-                lambda x: self.CONSEQUENCE_SEVERITY.get(str(x).lower(), 0) if pd.notna(x) else 0
-            )
-            df_encoded = df_encoded.drop('Consequence', axis=1)
-            df_encoded = df_encoded.rename(columns={'Consequence_encoded': 'Consequence'})
-        
-        # Encode CLIN_SIG using severity ranking (for target creation, not features)
-        if 'CLIN_SIG' in df.columns:
-            print("🔹 Encoding CLIN_SIG with severity rankings...")
-            df_encoded['CLIN_SIG_encoded'] = df['CLIN_SIG'].map(
-                lambda x: self.CLIN_SIG_SEVERITY.get(str(x).lower(), 0) if pd.notna(x) else 0
-            )
-            df_encoded = df_encoded.drop('CLIN_SIG', axis=1)
-            df_encoded = df_encoded.rename(columns={'CLIN_SIG_encoded': 'CLIN_SIG'})
-        
-        # Encode IMPACT using severity ranking
-        if 'IMPACT' in df.columns:
-            print("🔹 Encoding IMPACT with severity rankings...")
-            df_encoded['IMPACT_encoded'] = df['IMPACT'].map(
-                lambda x: self.IMPACT_SEVERITY.get(str(x).upper(), 1) if pd.notna(x) else 1
-            )
-            df_encoded = df_encoded.drop('IMPACT', axis=1)
-            df_encoded = df_encoded.rename(columns={'IMPACT_encoded': 'IMPACT'})
-        
-        # Parse SIFT scores from format "deleterious(0.01)" -> 0.01
-        if 'SIFT' in df.columns:
-            print("🔹 Parsing SIFT scores...")
-            def parse_sift(x):
-                if pd.isna(x) or x == '' or str(x).lower() == 'unknown':
-                    return np.nan
-                match = re.search(r'\(([\d.]+)\)', str(x))
-                return float(match.group(1)) if match else np.nan
-            
-            df_encoded['SIFT_parsed'] = df['SIFT'].apply(parse_sift)
-            df_encoded = df_encoded.drop('SIFT', axis=1)
-            df_encoded = df_encoded.rename(columns={'SIFT_parsed': 'SIFT'})
-        
-        # Parse PolyPhen scores from format "probably_damaging(0.95)" -> 0.95
-        if 'PolyPhen' in df.columns:
-            print("🔹 Parsing PolyPhen scores...")
-            def parse_polyphen(x):
-                if pd.isna(x) or x == '' or str(x).lower() == 'unknown':
-                    return np.nan
-                match = re.search(r'\(([\d.]+)\)', str(x))
-                return float(match.group(1)) if match else np.nan
-            
-            df_encoded['PolyPhen_parsed'] = df['PolyPhen'].apply(parse_polyphen)
-            df_encoded = df_encoded.drop('PolyPhen', axis=1)
-            df_encoded = df_encoded.rename(columns={'PolyPhen_parsed': 'PolyPhen'})
-        
-        # Encode AlphaMissense class
-        if 'alphamissense_class' in df.columns:
-            print("🔹 Encoding AlphaMissense classes...")
-            am_encoding = {'likely_pathogenic': 2, 'ambiguous': 1, 'likely_benign': 0}
-            df_encoded['alphamissense_class_encoded'] = df['alphamissense_class'].map(
-                lambda x: am_encoding.get(str(x).lower(), 1) if pd.notna(x) else 1
-            )
-            df_encoded = df_encoded.drop('alphamissense_class', axis=1)
-            df_encoded = df_encoded.rename(columns={'alphamissense_class_encoded': 'alphamissense_class'})
-        
-        # Convert remaining categorical to numeric using label encoding
-        categorical_cols = df_encoded.select_dtypes(include=['object']).columns
-        if len(categorical_cols) > 0:
-            print(f"🔹 Label encoding {len(categorical_cols)} remaining categorical columns...")
-            for col in categorical_cols:
-                if col in df_encoded.columns:
-                    # Handle "Unknown" values
-                    df_encoded[col] = df_encoded[col].replace(['Unknown', 'unknown', ''], np.nan)
-                    # Fill missing with most frequent value
-                    if not df_encoded[col].dropna().empty:
-                        most_frequent = df_encoded[col].mode().iloc[0] if not df_encoded[col].mode().empty else 'missing'
-                        df_encoded[col] = df_encoded[col].fillna(most_frequent)
-                        # Label encode
-                        le = LabelEncoder()
-                        df_encoded[col] = le.fit_transform(df_encoded[col].astype(str))
-                    else:
-                        df_encoded[col] = 0
-        
-        print(f"✅ Categorical encoding completed - all features now numeric")
-        return df_encoded
-
     def prepare_variant_features(self, selected_df):
-        """Prepare features for the selected variants with COMPLETE preprocessing pipeline"""
+        """Prepare variant features matching training pipeline exactly"""
         print("\n🔧 PREPARING VARIANT FEATURES")
         print("-" * 35)
         
-        # Load the full dataset to get features
+        # Load full dataset
         print("📊 Loading full dataset for feature extraction...")
         full_df = pd.read_csv(self.dataset_path)
         
-        # Check if dataset has categorical features (this is EXPECTED for raw data)
-        categorical_cols = full_df.select_dtypes(include=['object']).columns
-        if len(categorical_cols) > 0:
-            print(f"📋 Dataset contains {len(categorical_cols)} categorical columns (expected)")
-            print("🔧 Applying complete categorical encoding pipeline...")
-        else:
-            print("📋 Dataset appears to be already preprocessed")
+        # Match selected variants in full dataset using multiple identifiers
+        matched_variants = []
+        classification_map = {}  # Store variant ID to classification mapping
         
-        # Create lookup keys for selected variants
-        if 'chromosome' in selected_df.columns and 'position' in selected_df.columns:
-            selected_keys = set(zip(selected_df['chromosome'], selected_df['position']))
-            
-            # Find matching rows in full dataset
-            matching_mask = full_df.apply(
-                lambda row: (row['chromosome'], row['position']) in selected_keys, axis=1
-            )
-            
-            matched_df = full_df[matching_mask].copy()
-            print(f"✅ Found {len(matched_df)} matching variants in dataset")
-        else:
-            print("⚠️  No chromosome/position columns - using first N rows")
-            matched_df = full_df.head(len(selected_df)).copy()
+        for idx, selected_row in selected_df.iterrows():
+            # Create unique identifier for matching
+            if 'chromosome' in selected_row and 'position' in selected_row:
+                # Match by chromosome and position
+                matches = full_df[
+                    (full_df['chromosome'] == selected_row['chromosome']) & 
+                    (full_df['position'] == selected_row['position'])
+                ]
+                
+                # If multiple matches, try to narrow down by gene
+                if len(matches) > 1 and 'SYMBOL' in selected_row:
+                    gene_matches = matches[matches['SYMBOL'] == selected_row['SYMBOL']]
+                    if not gene_matches.empty:
+                        matches = gene_matches
+                
+                if not matches.empty:
+                    for _, match in matches.iterrows():
+                        matched_variants.append(match)
+                        # Create unique key for this variant
+                        var_key = f"{match['chromosome']}_{match['position']}_{match.get('SYMBOL', 'NA')}"
+                        classification_map[var_key] = selected_row.get('selection_category', 'unknown')
         
-        if len(matched_df) == 0:
-            print("❌ No matching variants found")
+        if not matched_variants:
+            print("❌ No variants matched in full dataset")
             return None, None, None
         
-        # CRITICAL FIX: Apply categorical encoding BEFORE feature selection
-        if len(categorical_cols) > 0:
-            matched_df_encoded = self._encode_categorical_features(matched_df)
-        else:
-            matched_df_encoded = matched_df.copy()
+        matched_df = pd.DataFrame(matched_variants)
+        print(f"🔍 Found {len(matched_df)} matching variants in dataset")
         
-        # Prepare features for TabNet - use the exact 56 feature names from training
-        feature_cols = self.feature_names
+        # Select features using same hierarchy as training - MUST MATCH EXACTLY
+        selected_features = []
         
-        # Check which features exist in the dataset after encoding
-        available_features = [col for col in feature_cols if col in matched_df_encoded.columns]
-        missing_features = [col for col in feature_cols if col not in matched_df_encoded.columns]
+        # TIER 1: VEP-Corrected Features (4 features) - CLIN_SIG excluded to prevent leakage
+        tier1_features = ['Consequence', 'DOMAINS', 'PUBMED', 'VAR_SYNONYMS']
+        for feature in tier1_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier1_vep_corrected'].append(feature)
         
-        if missing_features:
-            print(f"⚠️  Missing {len(missing_features)} features in dataset:")
-            for feat in missing_features[:5]:  # Show first 5 missing
-                print(f"     - {feat}")
-            if len(missing_features) > 5:
-                print(f"     ... and {len(missing_features) - 5} more")
-            print(f"📊 Using {len(available_features)} available features")
-            feature_cols = available_features
+        # TIER 2: Core VEP Annotations (10 features) - MUST MATCH TRAINING EXACTLY
+        tier2_features = ['SYMBOL', 'BIOTYPE', 'CANONICAL', 'PICK', 'HGVSc', 
+                         'HGVSp', 'Protein_position', 'Amino_acids', 'Existing_variation', 'VARIANT_CLASS']
+        for feature in tier2_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier2_core_vep'].append(feature)
         
-        # Extract features (now all numeric after encoding)
-        X_selected = matched_df_encoded[feature_cols].copy()
-        y_selected = matched_df_encoded.get('variant_classification', ['Unknown'] * len(matched_df_encoded))
+        # TIER 3: AlphaMissense (2 features)
+        tier3_features = ['alphamissense_pathogenicity', 'alphamissense_class']
+        for feature in tier3_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier3_alphamissense'].append(feature)
         
-        # Handle missing values (same as training)
-        X_selected = X_selected.fillna(0)
+        # TIER 4: Population Genetics (17 features)
+        tier4_features = ['AF', 'AFR_AF', 'AMR_AF', 'EAS_AF', 'EUR_AF', 'SAS_AF',
+                         'gnomADe_AF', 'gnomADe_AFR_AF', 'gnomADe_AMR_AF', 'gnomADe_ASJ_AF',
+                         'gnomADe_EAS_AF', 'gnomADe_FIN_AF', 'gnomADe_MID_AF', 'gnomADe_NFE_AF',
+                         'gnomADe_REMAINING_AF', 'gnomADe_SAS_AF', 'af_1kg']
+        for feature in tier4_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier4_population'].append(feature)
         
-        # Verify all features are numeric before scaling
-        numeric_check = X_selected.select_dtypes(include=['object']).columns
-        if len(numeric_check) > 0:
-            print(f"❌ ERROR: {len(numeric_check)} features still categorical after encoding!")
+        # TIER 5: Functional Predictions (6 features) - INCLUDE BOTH RAW AND PARSED
+        tier5_features = ['IMPACT', 'sift_score', 'polyphen_score', 'SIFT', 'PolyPhen', 'impact_score']
+        for feature in tier5_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier5_functional'].append(feature)
+        
+        # TIER 6: Clinical Context (5 features)
+        tier6_features = ['SOMATIC', 'PHENO', 'EXON', 'INTRON', 'CCDS']
+        for feature in tier6_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier6_clinical'].append(feature)
+        
+        # TIER 7: Variant Properties (8 features)
+        tier7_features = ['ref_length', 'alt_length', 'variant_size', 'is_indel', 
+                         'is_snv', 'is_lof', 'is_missense', 'is_synonymous']
+        for feature in tier7_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier7_variant_props'].append(feature)
+        
+        # TIER 8: Prostate Biology (4 features)
+        tier8_features = ['is_important_gene', 'dna_repair_pathway', 'mismatch_repair_pathway', 'hormone_pathway']
+        for feature in tier8_features:
+            if feature in matched_df.columns:
+                selected_features.append(feature)
+                self.feature_groups['tier8_prostate_biology'].append(feature)
+        
+        print(f"✅ Selected {len(selected_features)} features across 8 tiers:")
+        for tier, features in self.feature_groups.items():
+            if features:
+                print(f"   {tier}: {len(features)} features")
+        
+        # Ensure we have exactly 56 features by checking what might be missing
+        expected_feature_count = 56
+        if len(selected_features) != expected_feature_count:
+            print(f"\n⚠️  Feature count mismatch: {len(selected_features)} vs expected {expected_feature_count}")
+            
+            # Debug: show which features we have
+            print("\nCurrent features by tier:")
+            for tier, features in self.feature_groups.items():
+                if features:
+                    print(f"{tier}: {features}")
+        
+        # Select features from matched_df
+        X_selected = matched_df[selected_features].copy()
+        self.actual_feature_names = selected_features
+        
+        # Apply categorical encoding - MUST MATCH TRAINING EXACTLY
+        print("\n🔧 APPLYING CATEGORICAL ENCODING (TRAINING PIPELINE)")
+        print("-" * 50)
+        
+        # Identify categorical columns IN THE SELECTED FEATURES
+        categorical_columns = []
+        for col in selected_features:
+            if col in X_selected.columns and X_selected[col].dtype == 'object':
+                categorical_columns.append(col)
+        
+        print(f"📋 Found {len(categorical_columns)} categorical columns to encode")
+        
+        # 1. Encode Consequence with severity
+        if 'Consequence' in X_selected.columns:
+            print("🔹 Encoding Consequence with severity rankings...")
+            X_selected['Consequence'] = X_selected['Consequence'].map(self.CONSEQUENCE_SEVERITY).fillna(0)
+        
+        # 2. Encode IMPACT with severity
+        if 'IMPACT' in X_selected.columns:
+            print("🔹 Encoding IMPACT with severity rankings...")
+            X_selected['IMPACT'] = X_selected['IMPACT'].map(self.IMPACT_SEVERITY).fillna(0)
+        
+        # 3. Parse SIFT scores if sift_score not already in features
+        if 'SIFT' in X_selected.columns and 'sift_score' not in X_selected.columns:
+            print("🔹 Parsing SIFT scores...")
+            def parse_sift(sift_value):
+                if pd.isna(sift_value):
+                    return np.nan
+                try:
+                    match = re.search(r'\(([\d.]+)\)', str(sift_value))
+                    if match:
+                        return float(match.group(1))
+                except:
+                    pass
+                return np.nan
+            X_selected['sift_score'] = X_selected['SIFT'].apply(parse_sift)
+            # IMPORTANT: Do NOT drop SIFT column - keep both!
+        
+        # 4. Parse PolyPhen scores if polyphen_score not already in features
+        if 'PolyPhen' in X_selected.columns and 'polyphen_score' not in X_selected.columns:
+            print("🔹 Parsing PolyPhen scores...")
+            def parse_polyphen(pp_value):
+                if pd.isna(pp_value):
+                    return np.nan
+                try:
+                    match = re.search(r'\(([\d.]+)\)', str(pp_value))
+                    if match:
+                        return float(match.group(1))
+                except:
+                    pass
+                return np.nan
+            X_selected['polyphen_score'] = X_selected['PolyPhen'].apply(parse_polyphen)
+            # IMPORTANT: Do NOT drop PolyPhen column - keep both!
+        
+        # 5. Encode AlphaMissense class
+        if 'alphamissense_class' in X_selected.columns:
+            print("🔹 Encoding AlphaMissense classes...")
+            am_class_map = {'likely_benign': 0, 'ambiguous': 1, 'likely_pathogenic': 2}
+            X_selected['alphamissense_class'] = X_selected['alphamissense_class'].map(am_class_map).fillna(0)
+        
+        # 6. Label encode remaining categorical features
+        remaining_categorical = X_selected.select_dtypes(include=['object']).columns.tolist()
+        if remaining_categorical:
+            print(f"🔹 Label encoding {len(remaining_categorical)} remaining categorical columns...")
+            for col in remaining_categorical:
+                le = LabelEncoder()
+                # Handle missing values
+                mask = X_selected[col].notna()
+                if mask.sum() > 0:  # Only encode if there are non-null values
+                    X_selected.loc[mask, col] = le.fit_transform(X_selected.loc[mask, col])
+                X_selected[col] = X_selected[col].fillna(0).astype(int)
+        
+        print("✅ Categorical encoding completed - all features now numeric")
+        
+        # Verify all features are numeric
+        numeric_check = X_selected.select_dtypes(exclude=[np.number]).columns.tolist()
+        if numeric_check:
+            print(f"❌ WARNING: {len(numeric_check)} features still non-numeric:")
             for col in numeric_check[:5]:
                 print(f"     - {col}: {X_selected[col].dtype}")
             return None, None, None
         
-        # Apply scaling using the EXACT same scaler from training
+        # Apply scaling using the trained scaler if available
         if self.scaler is not None:
-            print("🔄 Applying trained scaler to encoded features...")
+            print("\n🔄 Applying trained scaler to encoded features...")
             try:
                 # The scaler expects exactly the same features it was trained on
                 X_scaled = self.scaler.transform(X_selected)
                 X_selected = pd.DataFrame(X_scaled, columns=X_selected.columns, index=X_selected.index)
                 print(f"✅ Features scaled successfully: {X_selected.shape}")
             except Exception as e:
-                print(f"❌ Scaling failed: {e}")
-                print("💡 Feature dimensions or types don't match training")
-                return None, None, None
+                print(f"⚠️  Scaling failed: {e}")
+                print("⚠️  Proceeding with unscaled features")
         else:
             print("⚠️  No scaler available - using raw encoded features")
         
-        # CRITICAL FIX: Create variant info with proper classification preservation
+        # Create variant info with FIXED classification preservation
         variant_info = []
         for i, (_, row) in enumerate(matched_df.iterrows()):
-            # Get classification from selected_df instead of matched_df
-            if i < len(selected_df) and 'selection_category' in selected_df.columns:
-                classification = selected_df.iloc[i]['selection_category']
-            else:
-                classification = 'unknown'
+            # Create unique key for this variant
+            var_key = f"{row['chromosome']}_{row['position']}_{row.get('SYMBOL', 'NA')}"
+            
+            # Get classification from mapping
+            classification = classification_map.get(var_key, 'unknown')
             
             info = {
                 'variant_id': f"variant_{i+1:02d}",
                 'chromosome': row.get('chromosome', 'unknown'),
                 'position': row.get('position', 'unknown'),
                 'gene': row.get('SYMBOL', 'unknown'),
-                'classification': classification  # FIXED: Now preserves from selected_df
+                'classification': classification
             }
             variant_info.append(info)
             print(f"   ✅ Prepared {info['variant_id']}: {classification}")
         
-        print(f"✅ Prepared features: {X_selected.shape}")
+        print(f"\n✅ Prepared features: {X_selected.shape}")
         print(f"📊 Feature columns: {len(X_selected.columns)}")
         print(f"🧮 All features numeric: {X_selected.select_dtypes(include=[np.number]).shape[1] == X_selected.shape[1]}")
         
@@ -433,13 +452,10 @@ class AttentionExtractor:
         for cls, count in preserved_classifications.items():
             print(f"   {cls}: {count} variants")
         
-        # Update feature names to match the actual features used
-        self.actual_feature_names = list(X_selected.columns)
-        
-        return X_selected, y_selected, variant_info
+        return X_selected, None, variant_info
 
     def extract_attention_weights(self, X_selected, variant_info):
-        """Extract attention weights using TabNet's explain() method"""
+        """Extract attention weights using TabNet's explain method"""
         print("\n🧠 EXTRACTING ATTENTION WEIGHTS")
         print("-" * 35)
         
@@ -447,18 +463,18 @@ class AttentionExtractor:
             print("❌ No model loaded")
             return None
         
-        if not hasattr(self.model, 'explain'):
-            print("❌ Model does not support attention extraction")
+        if X_selected is None or len(X_selected) == 0:
+            print("❌ No features prepared")
             return None
         
         try:
             # Convert to numpy array for TabNet
-            X_numpy = X_selected.values
-            print(f"📊 Input shape for TabNet: {X_numpy.shape}")
+            X_array = X_selected.values
+            print(f"📊 Input shape for TabNet: {X_array.shape}")
             
-            # Extract attention weights using TabNet's explain method
+            # Call explain method
             print("🔍 Calling TabNet.explain()...")
-            M_explain, masks = self.model.explain(X_numpy)
+            M_explain, masks = self.model.explain(X_array)
             
             print(f"✅ Attention extraction successful!")
             print(f"📊 Explanation shape: {M_explain.shape}")
@@ -466,7 +482,7 @@ class AttentionExtractor:
             
             # Process attention data for each variant
             attention_data = []
-            feature_names = self.actual_feature_names if self.actual_feature_names else self.feature_names
+            feature_names = list(X_selected.columns)  # Use actual column names
             
             for i, variant in enumerate(variant_info):
                 variant_attention = {
@@ -502,7 +518,7 @@ class AttentionExtractor:
             return None
 
     def save_attention_data(self, attention_data):
-        """Save attention weights to files"""
+        """Save attention weights to CSV files"""
         print("\n💾 SAVING ATTENTION DATA")
         print("-" * 25)
         
@@ -511,64 +527,70 @@ class AttentionExtractor:
             return None, None, None
         
         saved_files = []
-        
-        # Save individual attention files for each variant
-        for variant_data in attention_data:
-            variant_id = variant_data['variant_info']['variant_id']
-            
-            # Create attention dataframe
-            attention_rows = []
-            for step_idx, step_data in enumerate(variant_data['attention_by_step']):
-                for feature, attention in step_data.items():
-                    attention_rows.append({
-                        'decision_step': step_idx + 1,
-                        'feature': feature,
-                        'attention_weight': attention
-                    })
-            
-            # Save to CSV
-            attention_df = pd.DataFrame(attention_rows)
-            file_path = os.path.join(self.attention_dir, f"{variant_id}_attention.csv")
-            attention_df.to_csv(file_path, index=False)
-            saved_files.append(file_path)
-            print(f"   ✅ {variant_id}_attention.csv")
-        
-        # Create summary with top features per variant
         summary_data = []
+        
+        # Get feature names from first variant
+        if attention_data and attention_data[0]['attention_by_step']:
+            feature_names = list(attention_data[0]['attention_by_step'][0].keys())
+        else:
+            feature_names = self.actual_feature_names if self.actual_feature_names else self.feature_names
+        
+        # Save individual variant attention files
         for variant_data in attention_data:
             variant_info = variant_data['variant_info']
+            variant_id = variant_info['variant_id']
             
-            # Calculate average attention across all steps
-            feature_attention = {}
-            for step_data in variant_data['attention_by_step']:
-                for feature, attention in step_data.items():
-                    if feature not in feature_attention:
-                        feature_attention[feature] = []
-                    feature_attention[feature].append(attention)
+            # Create DataFrame for this variant
+            attention_df = pd.DataFrame()
             
-            # Average and sort
-            avg_attention = {feature: np.mean(weights) for feature, weights in feature_attention.items()}
-            top_features = sorted(avg_attention.items(), key=lambda x: x[1], reverse=True)[:3]
+            # Add variant info
+            attention_df['feature'] = feature_names
+            
+            # Add attention from each step
+            for step_idx, step_attention in enumerate(variant_data['attention_by_step']):
+                step_col = f"step_{step_idx+1}_attention"
+                attention_df[step_col] = [step_attention.get(feat, 0) for feat in feature_names]
+            
+            # Calculate global importance (average across steps)
+            step_cols = [col for col in attention_df.columns if col.endswith('_attention')]
+            attention_df['global_importance'] = attention_df[step_cols].mean(axis=1)
+            
+            # Add feature group
+            attention_df['feature_group'] = attention_df['feature'].apply(self._get_feature_group)
+            
+            # Sort by global importance
+            attention_df = attention_df.sort_values('global_importance', ascending=False)
+            
+            # Save to CSV
+            filename = f"{variant_id}_attention.csv"
+            filepath = os.path.join(self.attention_dir, filename)
+            attention_df.to_csv(filepath, index=False)
+            saved_files.append(filepath)
+            print(f"   ✅ {filename}")
+            
+            # Collect summary data
+            top_features = attention_df.nlargest(3, 'global_importance')
             
             summary_data.append({
                 'variant_id': variant_info['variant_id'],
                 'gene': variant_info['gene'],
                 'classification': variant_info['classification'],
-                'top_feature_1': top_features[0][0] if len(top_features) > 0 else '',
-                'top_attention_1': top_features[0][1] if len(top_features) > 0 else 0,
-                'top_feature_2': top_features[1][0] if len(top_features) > 1 else '',
-                'top_attention_2': top_features[1][1] if len(top_features) > 1 else 0,
-                'top_feature_3': top_features[2][0] if len(top_features) > 2 else '',
-                'top_attention_3': top_features[2][1] if len(top_features) > 2 else 0
+                'top_feature_1': top_features.iloc[0]['feature'] if len(top_features) > 0 else '',
+                'top_attention_1': top_features.iloc[0]['global_importance'] if len(top_features) > 0 else 0,
+                'top_feature_2': top_features.iloc[1]['feature'] if len(top_features) > 1 else '',
+                'top_attention_2': top_features.iloc[1]['global_importance'] if len(top_features) > 1 else 0,
+                'top_feature_3': top_features.iloc[2]['feature'] if len(top_features) > 2 else '',
+                'top_attention_3': top_features.iloc[2]['global_importance'] if len(top_features) > 2 else 0
             })
         
+        # Save summary file
         summary_file = os.path.join(self.attention_dir, "attention_summary.csv")
         summary_df = pd.DataFrame(summary_data)
         summary_df.to_csv(summary_file, index=False)
         print(f"   ✅ attention_summary.csv")
         
         # Verify classification preservation in summary
-        print(f"🔍 Final summary classification verification:")
+        print(f"\n🔍 Final summary classification verification:")
         summary_classifications = summary_df['classification'].value_counts()
         for classification, count in summary_classifications.items():
             print(f"   {classification}: {count} variants")
@@ -578,8 +600,9 @@ class AttentionExtractor:
             'extraction_date': datetime.now().isoformat(),
             'model_path': self.model_path,
             'variants_processed': len(attention_data),
-            'features_analyzed': len(self.actual_feature_names) if self.actual_feature_names else len(self.feature_names),
-            'decision_steps': len(attention_data[0]['attention_by_step']) if attention_data else 0
+            'features_analyzed': len(feature_names),
+            'decision_steps': len(attention_data[0]['attention_by_step']) if attention_data else 0,
+            'feature_groups': {k: len(v) for k, v in self.feature_groups.items() if v}
         }
         
         metadata_file = os.path.join(self.attention_dir, "extraction_metadata.json")
@@ -589,6 +612,13 @@ class AttentionExtractor:
         print(f"   ✅ extraction_metadata.json")
         
         return saved_files, summary_file, metadata_file
+
+    def _get_feature_group(self, feature):
+        """Get the tier group for a feature"""
+        for group_name, features in self.feature_groups.items():
+            if feature in features:
+                return group_name
+        return 'unknown'
 
     def generate_extraction_summary(self, attention_data):
         """Generate a summary of the extraction process"""
@@ -614,9 +644,9 @@ class AttentionExtractor:
             print(f"   {classification}: {count}")
         
         # Check for proper classification preservation
-        if len(classifications) == 1 and 'unknown' in str(list(classifications.keys())[0]).lower():
-            print(f"\n❌ CLASSIFICATION PRESERVATION FAILED!")
-            print(f"   All variants still classified as 'unknown'")
+        if 'unknown' in classifications and len(classifications) == 1:
+            print(f"\n⚠️  CLASSIFICATION PRESERVATION WARNING!")
+            print(f"   All variants marked as 'unknown' - check variant matching logic")
         else:
             print(f"\n✅ Classification preservation successful!")
         
@@ -624,12 +654,18 @@ class AttentionExtractor:
         if attention_data:
             sample_variant = attention_data[0]
             step_count = len(sample_variant['attention_by_step'])
-            feature_count = len(self.actual_feature_names) if self.actual_feature_names else len(self.feature_names)
+            feature_count = len(sample_variant['attention_by_step'][0]) if sample_variant['attention_by_step'] else 0
             
             print(f"\n🧠 Attention analysis details:")
             print(f"   Decision steps: {step_count}")
             print(f"   Features per step: {feature_count}")
             print(f"   Total attention weights: {len(attention_data) * step_count * feature_count}")
+            
+            # Show feature group distribution
+            print(f"\n📊 Feature groups analyzed:")
+            for group_name, features in self.feature_groups.items():
+                if features:
+                    print(f"   {group_name}: {len(features)} features")
 
 def main():
     """Main attention extraction pipeline"""

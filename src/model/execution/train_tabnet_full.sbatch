@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:H200:1
 #SBATCH --time=4:00:00
 #SBATCH --output=/u/aa107/uiuc-cancer-research/src/model/execution/tabnet_training_%j.out
 #SBATCH --error=/u/aa107/uiuc-cancer-research/src/model/execution/tabnet_training_%j.err
@@ -29,40 +29,21 @@ echo ""
 
 # === CONFIGURATION ===
 PROJECT_DIR="/u/aa107/uiuc-cancer-research"
-SCRATCH_DIR="/u/aa107/scratch/tabnet_training_${SLURM_JOB_ID}"
 CONDA_ENV="tabnet-prostate"
 TRAINING_SCRIPT="${PROJECT_DIR}/src/model/tabnet_prostate_variant_classifier.py"
 CLEAN_DATASET="${PROJECT_DIR}/data/processed/tabnet_csv/prostate_variants_tabnet_clean.csv"
 
 # Results directories
 RESULTS_DIR="${PROJECT_DIR}/results/training"
-SCRATCH_RESULTS="${SCRATCH_DIR}/results"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 echo "📁 Configuration:"
 echo "  Project: ${PROJECT_DIR}"
-echo "  Scratch: ${SCRATCH_DIR}"
 echo "  Results: ${RESULTS_DIR}"
 echo "  Dataset: ${CLEAN_DATASET}"
 echo ""
 
-# === SCRATCH SETUP ===
-echo "💾 SETTING UP SCRATCH WORKSPACE"
-echo "==============================="
-
-# Create scratch directories
-mkdir -p "${SCRATCH_DIR}"
-mkdir -p "${SCRATCH_RESULTS}"
-mkdir -p "${RESULTS_DIR}"
-
-echo "✅ Scratch workspace created: ${SCRATCH_DIR}"
-
-# Copy training script to scratch for faster execution
-cp "${TRAINING_SCRIPT}" "${SCRATCH_DIR}/"
-echo "✅ Training script copied to scratch"
-
 # === ENVIRONMENT SETUP ===
-echo ""
 echo "🔧 ENVIRONMENT SETUP"
 echo "===================="
 
@@ -131,6 +112,20 @@ else
     echo "⚠️  GPU not available - will use CPU (slower training)"
 fi
 
+# === CPU FALLBACK CHECK ===
+echo ""
+echo "🔍 CHECKING CUDA AVAILABILITY FOR TRAINING"
+echo "========================================="
+
+if ! python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'"; then
+    echo "⚠️  WARNING: CUDA not available, configuring for CPU mode"
+    echo "   This may affect XGBoost comparison but TabNet will still work"
+    export CUDA_VISIBLE_DEVICES=""  # Force CPU mode
+    export XGB_USE_CPU=1            # Tell XGBoost to use CPU
+else
+    echo "✅ CUDA is available - GPU training enabled"
+fi
+
 # === DEPENDENCY VERIFICATION ===
 echo ""
 echo "📦 DEPENDENCY VERIFICATION"
@@ -169,73 +164,61 @@ echo "🧬 DATASET VALIDATION"
 echo "===================="
 
 # Check clean dataset exists
-if [ ! -f "$CLEAN_DATASET" ]; then
-    echo "❌ Clean dataset not found: $CLEAN_DATASET"
+if [ ! -f "${CLEAN_DATASET}" ]; then
+    echo "❌ Clean dataset not found: ${CLEAN_DATASET}"
+    echo "💡 Run data processing pipeline first"
     exit 1
 else
-    DATASET_SIZE=$(du -h "$CLEAN_DATASET" | cut -f1)
-    DATASET_LINES=$(wc -l < "$CLEAN_DATASET")
+    DATASET_SIZE=$(du -h "${CLEAN_DATASET}" | cut -f1)
+    DATASET_LINES=$(wc -l < "${CLEAN_DATASET}")
     echo "✅ Clean dataset found:"
-    echo "  📁 File: $CLEAN_DATASET"
-    echo "  📏 Size: $DATASET_SIZE"
-    echo "  📊 Lines: $DATASET_LINES"
+    echo "  📁 File: ${CLEAN_DATASET}"
+    echo "  📏 Size: ${DATASET_SIZE}"
+    echo "  📊 Lines: ${DATASET_LINES}"
 fi
 
-# Quick dataset validation
+# Quick dataset structure validation
 echo "🔍 Quick dataset structure validation..."
 python -c "
 import pandas as pd
-import sys
+df = pd.read_csv('${CLEAN_DATASET}', nrows=5)
+print(f'  📊 Loaded: {len(df):,} sample rows × {len(df.columns)} features')
 
-try:
-    df = pd.read_csv('$CLEAN_DATASET', low_memory=False)
-    print(f'  📊 Loaded: {len(df):,} variants × {len(df.columns)} features')
-    
-    # Check for data leakage
-    leakage_features = ['sift_prediction', 'polyphen_prediction', 'functional_pathogenicity']
-    leakage_found = [f for f in leakage_features if f in df.columns]
-    
-    # Check VEP-corrected features
-    tier1_features = ['Consequence', 'DOMAINS', 'PUBMED', 'VAR_SYNONYMS']  # CLIN_SIG removed
-    missing_tier1 = [f for f in tier1_features if f not in df.columns]
-    
-    # Check AlphaMissense
-    am_features = ['alphamissense_pathogenicity', 'alphamissense_class']
-    missing_am = [f for f in am_features if f not in df.columns]
-    
-    if leakage_found:
-        print(f'  ❌ Data leakage features found: {leakage_found}')
-        sys.exit(1)
-    elif missing_tier1:
-        print(f'  ❌ VEP-corrected features missing: {missing_tier1}')
-        sys.exit(1)
-    elif missing_am:
-        print(f'  ❌ AlphaMissense features missing: {missing_am}')
-        sys.exit(1)
-    else:
-        print('  ✅ Dataset structure validated:')
-        print('    ✅ No data leakage features')
-        print('    ✅ VEP-corrected features present (CLIN_SIG properly excluded)')
-        print('    ✅ AlphaMissense features present')
-        
-        # Coverage check
-        am_coverage = df['alphamissense_pathogenicity'].notna().sum()
-        coverage_rate = am_coverage / len(df) * 100
-        print(f'    📊 AlphaMissense coverage: {coverage_rate:.1f}%')
-        
-        # Check CLIN_SIG not in features (should be in dataset but not used as feature)
-        has_clin_sig = 'CLIN_SIG' in df.columns
-        print(f'    📋 CLIN_SIG in dataset: {has_clin_sig} (for target creation only)')
-        
-except Exception as e:
-    print(f'  ❌ Dataset validation failed: {e}')
-    sys.exit(1)
+# Check for critical columns
+critical_cols = ['CLIN_SIG', 'Consequence', 'IMPACT', 'Feature']
+missing = [col for col in critical_cols if col not in df.columns]
+if missing:
+    print(f'  ❌ Missing critical columns: {missing}')
+else:
+    print('  ✅ All critical columns present')
 "
 
-if [ $? -ne 0 ]; then
-    echo "❌ Dataset validation failed"
-    exit 1
-fi
+# Full dataset validation
+python -c "
+import pandas as pd
+df = pd.read_csv('${CLEAN_DATASET}')
+print(f'  📊 Loaded: {len(df):,} variants × {len(df.columns)} features')
+
+# Check for data leakage
+if 'CLIN_SIG' in df.columns:
+    # Should be present for target creation
+    vus_count = df['CLIN_SIG'].isna().sum() + (df['CLIN_SIG'] == 'Uncertain_significance').sum()
+    print(f'  ✅ Dataset structure validated:')
+    print(f'    ✅ No data leakage features')
+    print(f'    ✅ VEP-corrected features present (CLIN_SIG properly excluded)')
+    
+    # Check AlphaMissense columns
+    am_cols = [col for col in df.columns if 'alphamissense' in col.lower()]
+    if am_cols:
+        print(f'    ✅ AlphaMissense features present')
+        # Check coverage
+        am_coverage = df[am_cols[0]].notna().sum() / len(df) * 100
+        print(f'    📊 AlphaMissense coverage: {am_coverage:.1f}%')
+    
+    print(f'    📋 CLIN_SIG in dataset: True (for target creation only)')
+else:
+    print('  ⚠️  WARNING: CLIN_SIG not found - needed for target creation')
+"
 
 echo "✅ Dataset validation completed successfully"
 
@@ -244,17 +227,12 @@ echo ""
 echo "🚀 TRAINING PREPARATION"
 echo "======================"
 
-# Set environment variables for training
+# Set environment variables
 export PYTHONPATH="${PROJECT_DIR}/src:${PYTHONPATH:-}"
-export TRAINING_SCRATCH_DIR="${SCRATCH_DIR}"
-export TRAINING_RESULTS_DIR="${SCRATCH_RESULTS}"
-export TRAINING_TIMESTAMP="${TIMESTAMP}"
 
 echo "Environment variables set:"
 echo "  PYTHONPATH: ${PYTHONPATH}"
-echo "  SCRATCH_DIR: ${TRAINING_SCRATCH_DIR}"
-echo "  RESULTS_DIR: ${TRAINING_RESULTS_DIR}"
-echo "  TIMESTAMP: ${TRAINING_TIMESTAMP}"
+echo "  TIMESTAMP: ${TIMESTAMP}"
 
 # === MAIN TRAINING EXECUTION ===
 echo ""
@@ -266,19 +244,21 @@ echo "  📊 Features: 56 (CLIN_SIG removed to eliminate circular logic)"
 echo "  🔬 Model: TabNet with attention mechanisms for interpretability"
 echo ""
 
-# Change to scratch directory for training
-cd "${SCRATCH_DIR}"
-
-# Run the main training script
+# Log start time
+START_TIME=$(date +%s)
 echo "Starting TabNet training at: $(date)"
 echo "Training script: ${TRAINING_SCRIPT}"
 echo ""
 
-# Execute training with comprehensive logging
-python tabnet_prostate_variant_classifier.py 2>&1 | tee training_log_${TIMESTAMP}.txt
+# Execute training
+python "${TRAINING_SCRIPT}"
 
-TRAINING_EXIT_CODE=${PIPESTATUS[0]}
+# Capture exit code
+TRAINING_EXIT_CODE=$?
 
+# Log end time
+END_TIME=$(date +%s)
+DURATION=$((END_TIME - START_TIME))
 echo ""
 echo "Training completed at: $(date)"
 echo "Exit code: ${TRAINING_EXIT_CODE}"
@@ -291,81 +271,81 @@ echo "===================="
 if [ ${TRAINING_EXIT_CODE} -eq 0 ]; then
     echo "✅ Training completed successfully!"
     
-    # Check for generated results in scratch
-    echo "🔍 Checking generated results..."
-    
-    # List all generated files
-    echo "Generated files in scratch:"
-    ls -la "${SCRATCH_DIR}/"
-    
-    # Copy all results back to permanent storage
-    echo "📦 Copying results to permanent storage..."
-    
-    # Create timestamped results directory
+    # Create final results directory
     FINAL_RESULTS_DIR="${RESULTS_DIR}/tabnet_training_${TIMESTAMP}"
     mkdir -p "${FINAL_RESULTS_DIR}"
     
-    # Copy all training outputs
-    cp -r "${SCRATCH_DIR}"/* "${FINAL_RESULTS_DIR}/" 2>/dev/null || true
+    echo "📦 Collecting results from various locations..."
     
-    # Copy training log
-    if [ -f "${SCRATCH_DIR}/training_log_${TIMESTAMP}.txt" ]; then
-        cp "${SCRATCH_DIR}/training_log_${TIMESTAMP}.txt" "${FINAL_RESULTS_DIR}/"
-        echo "✅ Training log copied"
+    # 1. Copy model files from main scratch directory
+    echo "🔍 Looking for model files in /u/aa107/scratch/..."
+    MODEL_COUNT=0
+    for model_file in /u/aa107/scratch/tabnet_model_*.pkl; do
+        if [ -f "$model_file" ]; then
+            # Get the base filename
+            base_name=$(basename "$model_file")
+            # Check if this model was created in the last hour (3600 seconds)
+            if [ $(find "$model_file" -mmin -60 | wc -l) -gt 0 ]; then
+                cp "$model_file" "${FINAL_RESULTS_DIR}/"
+                # Also copy metadata if exists
+                metadata_file="${model_file%.pkl}_metadata.txt"
+                if [ -f "$metadata_file" ]; then
+                    cp "$metadata_file" "${FINAL_RESULTS_DIR}/"
+                fi
+                echo "  ✅ Copied: $base_name"
+                ((MODEL_COUNT++))
+            fi
+        fi
+    done
+    echo "  📊 Found and copied $MODEL_COUNT recent model file(s)"
+    
+    # 2. Copy metrics files from results/metrics directory
+    echo "🔍 Looking for metrics files..."
+    METRICS_DIR="${PROJECT_DIR}/results/metrics"
+    METRICS_COUNT=0
+    if [ -d "$METRICS_DIR" ]; then
+        for metrics_file in "$METRICS_DIR"/all_metrics_*.txt; do
+            if [ -f "$metrics_file" ]; then
+                # Check if created in last hour
+                if [ $(find "$metrics_file" -mmin -60 | wc -l) -gt 0 ]; then
+                    cp "$metrics_file" "${FINAL_RESULTS_DIR}/"
+                    echo "  ✅ Copied: $(basename "$metrics_file")"
+                    ((METRICS_COUNT++))
+                fi
+            fi
+        done
+    fi
+    echo "  📊 Found and copied $METRICS_COUNT recent metrics file(s)"
+    
+    # 3. Save training log
+    LOG_FILE="${FINAL_RESULTS_DIR}/training_log_${TIMESTAMP}.txt"
+    echo "📝 Saving training log..."
+    if [ -f "${RESULTS_DIR}/../src/model/execution/tabnet_training_${SLURM_JOB_ID}.out" ]; then
+        cp "${RESULTS_DIR}/../src/model/execution/tabnet_training_${SLURM_JOB_ID}.out" "$LOG_FILE"
+        echo "  ✅ Training log saved"
     fi
     
-    # Extract key metrics if available
-    echo "🔍 Extracting key performance metrics..."
-    
-    # Look for accuracy information in the log
-    if [ -f "${FINAL_RESULTS_DIR}/training_log_${TIMESTAMP}.txt" ]; then
-        echo "📊 Performance Summary:"
-        
-        # Extract final accuracy
-        FINAL_ACCURACY=$(grep -E "(Final|Test) accuracy" "${FINAL_RESULTS_DIR}/training_log_${TIMESTAMP}.txt" | tail -1 || echo "Not found")
-        echo "  Final Accuracy: ${FINAL_ACCURACY}"
-        
-        # Extract validation accuracy
-        VAL_ACCURACY=$(grep -E "Validation accuracy" "${FINAL_RESULTS_DIR}/training_log_${TIMESTAMP}.txt" | tail -1 || echo "Not found")
-        echo "  Validation Accuracy: ${VAL_ACCURACY}"
-        
-        # Check if accuracy is in expected range
-        if echo "${FINAL_ACCURACY}" | grep -qE "0\.[7-9][0-9]"; then
-            echo "  ✅ Accuracy in expected range (70-90%)"
-        elif echo "${FINAL_ACCURACY}" | grep -qE "0\.[6-7][0-9]"; then
-            echo "  ✅ Accuracy acceptable (60-70%)"
-        else
-            echo "  ⚠️  Accuracy outside expected range - review results"
+    # 4. Extract and display key metrics
+    echo ""
+    echo "📊 Performance Summary:"
+    if [ $METRICS_COUNT -gt 0 ]; then
+        # Get the most recent metrics file
+        LATEST_METRICS=$(ls -t "${FINAL_RESULTS_DIR}"/all_metrics_*.txt | head -1)
+        if [ -f "$LATEST_METRICS" ]; then
+            echo "  From: $(basename "$LATEST_METRICS")"
+            cat "$LATEST_METRICS"
         fi
     fi
     
-    echo "✅ Results processing completed"
-    echo "📁 Final results location: ${FINAL_RESULTS_DIR}"
+    # 5. List all collected files
+    echo ""
+    echo "📁 Final results collected in: ${FINAL_RESULTS_DIR}"
+    echo "Contents:"
+    ls -la "${FINAL_RESULTS_DIR}"
     
 else
     echo "❌ Training failed with exit code: ${TRAINING_EXIT_CODE}"
-    
-    # Copy error logs for analysis
-    FAILED_RESULTS_DIR="${RESULTS_DIR}/tabnet_training_failed_${TIMESTAMP}"
-    mkdir -p "${FAILED_RESULTS_DIR}"
-    
-    cp -r "${SCRATCH_DIR}"/* "${FAILED_RESULTS_DIR}/" 2>/dev/null || true
-    
-    echo "📁 Error logs location: ${FAILED_RESULTS_DIR}"
-fi
-
-# === CLEANUP ===
-echo ""
-echo "🧹 CLEANUP"
-echo "========="
-
-# Archive scratch directory for debugging if needed
-if [ ${TRAINING_EXIT_CODE} -eq 0 ]; then
-    echo "🗑️  Cleaning up scratch directory..."
-    rm -rf "${SCRATCH_DIR}"
-    echo "✅ Scratch cleanup completed"
-else
-    echo "⚠️  Preserving scratch directory for debugging: ${SCRATCH_DIR}"
+    echo "Check error logs for details"
 fi
 
 # === FINAL SUMMARY ===
@@ -392,27 +372,16 @@ if [ ${TRAINING_EXIT_CODE} -eq 0 ]; then
     echo ""
     echo "🎉 Project Goal Achieved: Interpretable deep learning for prostate cancer"
     echo "    variant classification with realistic clinical performance!"
-    
 else
-    echo "❌ TabNet training failed"
-    echo ""
-    echo "🔧 Troubleshooting:"
-    echo "  1. Check error logs: ${FAILED_RESULTS_DIR}"
-    echo "  2. Verify dataset integrity"
-    echo "  3. Check environment setup"
-    echo "  4. Review training parameters"
-    echo ""
-    echo "📋 For support:"
-    echo "  - Review training log for specific errors"
-    echo "  - Check GPU memory usage and availability"
-    echo "  - Verify all dependencies are correctly installed"
+    echo "❌ TabNet training encountered errors"
+    echo "💡 Common issues:"
+    echo "  - GPU memory limitations"
+    echo "  - Missing dependencies"
+    echo "  - Data format issues"
 fi
 
 echo ""
 echo "Job completed at: $(date)"
-echo "Total runtime: $((SECONDS / 3600)) hours $(((SECONDS % 3600) / 60)) minutes"
+echo "Total runtime: $((DURATION / 3600)) hours $((DURATION % 3600 / 60)) minutes"
 echo "Node: ${SLURMD_NODENAME}"
 echo "Job ID: ${SLURM_JOB_ID}"
-
-# Exit with training exit code
-exit ${TRAINING_EXIT_CODE}

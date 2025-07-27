@@ -7,25 +7,31 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
-#SBATCH --time=2:00:00
-#SBATCH --output=tabnet_attention_analysis_%j.out
-#SBATCH --error=tabnet_attention_analysis_%j.err
+#SBATCH --time=1:00:00
+#SBATCH --output=/u/aa107/uiuc-cancer-research/src/analysis/attention_analysis_%j.out
+#SBATCH --error=/u/aa107/uiuc-cancer-research/src/analysis/attention_analysis_%j.err
+
+# ================================================================
+# TABNET ATTENTION ANALYSIS - AUTOMATED SLURM PIPELINE
+# Updated to include 5 scripts and use latest model
+# ================================================================
+
+set -euo pipefail
 
 echo "🧠 TABNET ATTENTION ANALYSIS - AUTOMATED SLURM PIPELINE"
 echo "========================================================"
-echo "Running complete 4-step attention analysis on GPU nodes"
+echo "Running complete 5-step attention analysis on GPU nodes"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $SLURMD_NODENAME"
 echo "Started: $(date)"
 echo ""
 
-# GPU check
+# Check GPU info
 if command -v nvidia-smi &> /dev/null; then
-    echo "GPU Info: $(nvidia-smi --query-gpu=name --format=csv,noheader,nounits)"
-else
-    echo "⚠️  GPU info not available"
+    GPU_INFO=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+    echo "GPU Info: $GPU_INFO"
+    echo ""
 fi
-echo ""
 
 # === CONFIGURATION ===
 PROJECT_DIR="/u/aa107/uiuc-cancer-research"
@@ -33,25 +39,22 @@ ANALYSIS_DIR="${PROJECT_DIR}/src/analysis"
 RESULTS_DIR="${PROJECT_DIR}/results/attention_analysis"
 CONDA_ENV="tabnet-prostate"
 
-# Analysis scripts in execution order
+# Analysis scripts (5 scripts now)
 SCRIPT_1="${ANALYSIS_DIR}/variant_selector.py"
 SCRIPT_2="${ANALYSIS_DIR}/attention_extractor.py"
 SCRIPT_3="${ANALYSIS_DIR}/attention_analyzer.py"
 SCRIPT_4="${ANALYSIS_DIR}/results_generator.py"
+SCRIPT_5="${ANALYSIS_DIR}/feature_importance_comparison.py"  # NEW
 
-# === ENVIRONMENT SETUP ===
 echo "🔧 ENVIRONMENT SETUP"
 echo "-------------------"
+echo "Working directory: $PROJECT_DIR"
+echo "Results directory: $RESULTS_DIR"
 
 # Navigate to project directory
-cd "${PROJECT_DIR}"
-echo "Working directory: $(pwd)"
+cd "$PROJECT_DIR"
 
-# Create results directory
-mkdir -p "${RESULTS_DIR}"
-echo "Results directory: ${RESULTS_DIR}"
-
-# Load anaconda module (required on campus cluster)
+# Load anaconda module
 echo "Loading anaconda module..."
 if module load anaconda3 2>/dev/null; then
     echo "✅ Anaconda module loaded"
@@ -59,38 +62,27 @@ else
     echo "⚠️  Anaconda module not available - using system conda"
 fi
 
-# Initialize conda for shell script (critical for compute nodes)
+# Initialize conda
 echo "Initializing conda for bash..."
-if [ -f "$(conda info --base)/etc/profile.d/conda.sh" ]; then
-    source "$(conda info --base)/etc/profile.d/conda.sh"
-    echo "✅ Conda initialized from $(conda info --base)"
-else
-    eval "$(conda shell.bash hook)" 2>/dev/null || {
-        echo "❌ Could not initialize conda"
-        echo "💡 Make sure conda is installed and in PATH"
-        exit 1
-    }
-fi
+eval "$(conda shell.bash hook)"
+CONDA_BASE=$(conda info --base)
+echo "✅ Conda initialized from $CONDA_BASE"
 
-# Check if environment exists
-if conda env list | grep -q "${CONDA_ENV}"; then
-    echo "✅ Found ${CONDA_ENV} environment"
+# Check environment exists
+if conda env list | grep -q "$CONDA_ENV"; then
+    echo "✅ Found $CONDA_ENV environment"
 else
-    echo "❌ ${CONDA_ENV} environment not found"
-    echo "💡 Create it first by running:"
-    echo "   bash src/model/tests/run_tabnet_tests.sh"
+    echo "❌ $CONDA_ENV environment not found"
     exit 1
 fi
 
-# Activate the conda environment
-echo "Activating ${CONDA_ENV} environment..."
-conda activate "${CONDA_ENV}"
-
-# Verify activation
+# Activate environment
+echo "Activating $CONDA_ENV environment..."
+conda activate "$CONDA_ENV"
 echo "✅ Environment activated:"
 echo "  Python: $(which python)"
 echo "  Python version: $(python --version)"
-echo "  Conda env: ${CONDA_DEFAULT_ENV}"
+echo "  Conda env: $CONDA_DEFAULT_ENV"
 echo ""
 
 # === GPU VERIFICATION ===
@@ -144,7 +136,6 @@ except ImportError as e:
 
 if [ $? -ne 0 ]; then
     echo "❌ Dependency check failed"
-    echo "💡 Run: bash src/model/tests/run_tabnet_tests.sh"
     exit 1
 fi
 
@@ -155,31 +146,35 @@ echo ""
 echo "📋 SCRIPT VALIDATION"
 echo "-------------------"
 
-SCRIPTS=("$SCRIPT_1" "$SCRIPT_2" "$SCRIPT_3" "$SCRIPT_4")
-SCRIPT_NAMES=("variant_selector.py" "attention_extractor.py" "attention_analyzer.py" "results_generator.py")
+# Updated to check 5 scripts
+SCRIPTS=("$SCRIPT_1" "$SCRIPT_2" "$SCRIPT_3" "$SCRIPT_4" "$SCRIPT_5")
+SCRIPT_NAMES=("variant_selector.py" "attention_extractor.py" "attention_analyzer.py" "results_generator.py" "feature_importance_comparison.py")
 
 for i in "${!SCRIPTS[@]}"; do
     script="${SCRIPTS[$i]}"
     name="${SCRIPT_NAMES[$i]}"
     
     if [ ! -f "$script" ]; then
-        echo "❌ Script not found: $script"
-        exit 1
+        if [ "$name" = "feature_importance_comparison.py" ]; then
+            echo "⚠️  Script not found: $script (will be created)"
+        else
+            echo "❌ Script not found: $script"
+            exit 1
+        fi
     else
         echo "✅ Found: $name"
     fi
 done
 
-echo "✅ All analysis scripts validated"
+echo "✅ All required scripts validated"
 
 # === PREREQUISITE CHECK ===
 echo ""
 echo "🧬 PREREQUISITE CHECK"
 echo "-------------------"
 
-# Check if trained model exists
-#MODEL_PATH="/u/aa107/scratch/tabnet_model_20250706_151358.pkl"
-MODEL_PATH="/u/aa107/scratch/tabnet_model_20250708_161747.pkl"
+# Check trained model - UPDATED to latest model
+MODEL_PATH="/u/aa107/scratch/tabnet_model_20250727_053446.pkl"
 if [ ! -f "$MODEL_PATH" ]; then
     echo "❌ Trained TabNet model not found: $MODEL_PATH"
     echo "💡 Train the model first using the training pipeline"
@@ -310,19 +305,44 @@ else
     exit 1
 fi
 
+# Step 5: Feature Importance Comparison (NEW)
+echo ""
+echo "🔍 STEP 5: FEATURE IMPORTANCE COMPARISON"
+echo "---------------------------------------"
+echo "Purpose: Compare training vs attention feature importance"
+echo "Script: feature_importance_comparison.py"
+echo ""
+
+# Check if script exists, if not skip with warning
+if [ -f "$SCRIPT_5" ]; then
+    python "$SCRIPT_5"
+    STEP5_EXIT_CODE=$?
+    
+    if [ $STEP5_EXIT_CODE -eq 0 ]; then
+        echo "✅ Step 5 completed successfully"
+    else
+        echo "⚠️  Step 5 failed but continuing (exit code: $STEP5_EXIT_CODE)"
+    fi
+else
+    echo "⚠️  Feature importance comparison script not found - skipping"
+    echo "   Create $SCRIPT_5 to enable this analysis"
+fi
+
 # === COMPLETION SUMMARY ===
+END_TIME=$(date +%s)
+DURATION=$((END_TIME - START_TIME))
+
 echo ""
 echo "🎉 ATTENTION ANALYSIS PIPELINE COMPLETED!"
 echo "========================================="
-END_TIME=$(date +%s)
-DURATION=$((END_TIME - START_TIME))
 echo "Completed: $(date)"
-echo "Duration: ${DURATION} seconds"
+echo "Duration: $DURATION seconds"
 echo "Job ID: $SLURM_JOB_ID"
 echo ""
 
+# Count total outputs
 echo "📁 Output Directory Structure:"
-echo "   $RESULTS_DIR/"
+echo "   ${RESULTS_DIR}/"
 echo "   ├── selected_variants.csv                    # Selected variants"
 echo "   ├── attention_weights/                       # Individual attention files"
 echo "   │   ├── variant_*_attention.csv"
@@ -339,24 +359,25 @@ echo "       ├── validation_dashboard.png"
 echo "       └── analysis_summary.json"
 echo ""
 
-# Final verification
-TOTAL_FILES=$(find "$RESULTS_DIR" -type f | wc -l)
-TOTAL_SIZE=$(du -sh "$RESULTS_DIR" | cut -f1)
+# Calculate total files and size
+if [ -d "$RESULTS_DIR" ]; then
+    TOTAL_FILES=$(find "$RESULTS_DIR" -type f | wc -l)
+    TOTAL_SIZE=$(du -sh "$RESULTS_DIR" | cut -f1)
+    echo "📊 Analysis Summary:"
+    echo "   Total files generated: $TOTAL_FILES"
+    echo "   Total output size: $TOTAL_SIZE"
+    echo "   Analysis duration: $DURATION seconds"
+    echo "   GPU utilization: Available"
+fi
 
-echo "📊 Analysis Summary:"
-echo "   Total files generated: $TOTAL_FILES"
-echo "   Total output size: $TOTAL_SIZE"
-echo "   Analysis duration: ${DURATION} seconds"
-echo "   GPU utilization: Available"
 echo ""
-
 echo "🎯 Next Steps:"
-echo "   1. Review attention patterns in: $RESULTS_DIR/pattern_analysis/"
-echo "   2. Examine final results in: $RESULTS_DIR/final_results/"
-echo "   3. Share results with clinical experts for validation"
-echo "   4. Prepare manuscript using generated materials"
+echo "   1. Review attention patterns in: ${RESULTS_DIR}/pattern_analysis/"
+echo "   2. Examine final results in: ${RESULTS_DIR}/final_results/"
+echo "   3. Check feature comparison in: ${RESULTS_DIR}/feature_importance_comparison/"
+echo "   4. Share results with clinical experts for validation"
+echo "   5. Prepare manuscript using generated materials"
 echo ""
-
 echo "✅ TabNet attention analysis pipeline completed successfully!"
 echo "🎉 Ready for clinical expert review and publication!"
 echo ""
@@ -364,4 +385,4 @@ echo "📋 SLURM Job Summary:"
 echo "   Job ID: $SLURM_JOB_ID"
 echo "   Node: $SLURMD_NODENAME"
 echo "   Exit Status: SUCCESS"
-echo "   Log files: tabnet_attention_analysis_${SLURM_JOB_ID}.out/.err"
+echo "   Log files: attention_analysis_${SLURM_JOB_ID}.out/.err"
