@@ -125,10 +125,35 @@ class TabNetAttentionExtractor:
             import torch
             from pytorch_tabnet.tab_model import TabNetClassifier
             
-            # Load model directly from pickle file
+            # Detect available device
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            print(f"🎯 Using device: {device}")
+            
+            # Load model with proper device mapping and fallback
             print("📁 Loading model from pickle file...")
-            with open(self.model_path, 'rb') as f:
-                model_data = torch.load(f, map_location='cpu', weights_only=False)
+
+            # Clear CUDA context to avoid resource conflicts
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                print("🔄 Cleared CUDA cache and synchronized")
+
+            # Try loading with primary device, fallback to CPU if CUDA issues
+            try:
+                with open(self.model_path, 'rb') as f:
+                    model_data = torch.load(f, map_location=device, weights_only=False)
+                print(f"✅ Model loaded successfully on {device}")
+            except RuntimeError as e:
+                if 'CUDA' in str(e) and device.type == 'cuda':
+                    print(f"⚠️  CUDA loading failed: {e}")
+                    print("🔄 Falling back to CPU loading...")
+                    device = torch.device('cpu')
+                    fallback_attempted = True
+                    with open(self.model_path, 'rb') as f:
+                        model_data = torch.load(f, map_location=device, weights_only=False)
+                    print("✅ Model loaded successfully on CPU (fallback)")
+                else:
+                    raise e
             
             # Extract the TabNet model
             if isinstance(model_data, dict) and 'tabnet_model' in model_data:
@@ -149,13 +174,13 @@ class TabNetAttentionExtractor:
                 print("❌ TabNet model missing explain() method")
                 return False
             
-            # Force CPU device for attention extraction
-            device = 'cpu'
-            print(f"🎯 Target device: {device} (CPU-only mode for stability)")
-            
-            # Move model to CPU if needed
+            # Ensure model is on correct device
             if hasattr(self.model, 'device_name'):
-                self.model.device_name = device
+                self.model.device_name = str(device)
+
+            if fallback_attempted:
+                print("⚠️  Running on CPU due to CUDA resource conflicts")
+                print("💡 Consider requesting exclusive GPU access: #SBATCH --gres=gpu:1 --exclusive")
             
             # Display model info
             print(f"📊 Features from pickle: {len(self.feature_names)}")
@@ -449,8 +474,9 @@ class TabNetAttentionExtractor:
             # Ensure model is in eval mode
             self.model.eval()
             
-            # No GPU tensor conversion needed - we're in CPU mode
-            print("🎯 Running attention extraction on CPU")
+            # Use GPU if available for faster processing
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            print(f"🎯 Running attention extraction on {device}")
             
             # Call explain method
             print("🔍 Calling TabNet.explain()...")

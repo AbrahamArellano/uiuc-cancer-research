@@ -13,7 +13,7 @@
 
 # ================================================================
 # TABNET ATTENTION ANALYSIS - AUTOMATED SLURM PIPELINE
-# Updated to include 5 scripts and use latest model
+# Updated to use GPU for optimal performance with GPU-trained models
 # ================================================================
 
 set -euo pipefail
@@ -85,10 +85,9 @@ echo "  Python version: $(python --version)"
 echo "  Conda env: $CONDA_DEFAULT_ENV"
 echo ""
 
-# Force CPU-only execution to avoid CUDA conflicts
-export CUDA_VISIBLE_DEVICES=""
-echo "🔧 CUDA_VISIBLE_DEVICES set to empty (CPU-only mode)"
-echo "   This avoids GPU conflicts for attention analysis"
+# GPU mode for optimal performance with GPU-trained models
+echo "🔧 GPU MODE ENABLED"
+echo "   Using allocated GPU for optimal attention analysis performance"
 
 # === GPU VERIFICATION ===
 echo "🚀 GPU VERIFICATION"
@@ -108,7 +107,7 @@ if torch.cuda.is_available():
     print(f'GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB')
 "
 else
-    echo "⚠️  GPU not available - attention analysis may have device issues"
+    echo "⚠️  GPU not available - attention analysis may have issues"
 fi
 echo ""
 
