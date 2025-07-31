@@ -47,7 +47,7 @@ warnings.filterwarnings('ignore')
 class ProstateVariantTabNet:
     """Enhanced TabNet for prostate cancer variant classification"""
     
-    def __init__(self, n_d=64, n_a=64, n_steps=6):
+    def __init__(self, n_d=64, n_a=64, n_steps=6, gamma=1.3, lambda_sparse=1e-3, learning_rate=2e-2):
         """Initialize TabNet with optimal hyperparameters"""
         self.n_d = n_d
         self.n_a = n_a  
@@ -56,6 +56,9 @@ class ProstateVariantTabNet:
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
         self.feature_names = []
+        self.gamma = gamma                    
+        self.lambda_sparse = lambda_sparse    
+        self.learning_rate = learning_rate            
         self.feature_groups = {
             'tier1_vep_corrected': [],
             'tier2_core_vep': [],
@@ -386,10 +389,10 @@ class ProstateVariantTabNet:
             n_d=self.n_d,
             n_a=self.n_a,
             n_steps=self.n_steps,
-            gamma=1.3,
-            lambda_sparse=1e-3,
+            gamma=self.gamma,
+            lambda_sparse=self.lambda_sparse,
             optimizer_fn=torch.optim.Adam,
-            optimizer_params=dict(lr=2e-2),
+            optimizer_params=dict(lr=self.learning_rate),
             mask_type='entmax',
             scheduler_params={"step_size": 50, "gamma": 0.9},
             scheduler_fn=torch.optim.lr_scheduler.StepLR,
@@ -433,10 +436,10 @@ class ProstateVariantTabNet:
             
             # Create fold model
             fold_model = TabNetClassifier(
-                n_d=32, n_a=32, n_steps=3,  # Reduced for faster CV
-                gamma=1.3, lambda_sparse=1e-3,
+                n_d=self.n_d//2, n_a=self.n_a//2, n_steps=max(3, self.n_steps-3),  # Reduced for faster CV
+                gamma=self.gamma, lambda_sparse=self.lambda_sparse,
                 optimizer_fn=torch.optim.Adam,
-                optimizer_params=dict(lr=2e-2),
+                optimizer_params=dict(lr=self.learning_rate),
                 verbose=0
             )
             
@@ -568,6 +571,9 @@ class ProstateVariantTabNet:
             'n_d': self.n_d,
             'n_a': self.n_a,
             'n_steps': self.n_steps,
+            'gamma': self.gamma,
+            'lambda_sparse': self.lambda_sparse,
+            'learning_rate': self.learning_rate,
             'training_timestamp': datetime.now().isoformat()
         }
         
@@ -615,10 +621,13 @@ class ProstateVariantTabNet:
         self.n_d = model_data['n_d']
         self.n_a = model_data['n_a']
         self.n_steps = model_data['n_steps']
+        self.gamma = model_data['gamma']
+        self.lambda_sparse = model_data['lambda_sparse'] 
+        self.learning_rate = model_data['learning_rate']
         
         print(f"✅ Model loaded from: {model_path}")
         print(f"📊 Features: {len(self.feature_names)}")
-        print(f"🏗️  Architecture: n_d={self.n_d}, n_a={self.n_a}, n_steps={self.n_steps}")
+        print(f"🏗️  Architecture: n_d={self.n_d}, n_a={self.n_a}, n_steps={self.n_steps}, gamma={self.gamma}, lambda_sparse={self.lambda_sparse}, lr={self.learning_rate}")
         print(f"🎯 Classes: {list(self.label_encoder.classes_)}")
 
 def main():

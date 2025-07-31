@@ -3,7 +3,8 @@
 H100 GPU Hyperparameter Optimization for TabNet Prostate Cancer Classification
 Systematic grid search to achieve 80-85% accuracy target using 36 GPU hours
 """
-
+import matplotlib.pyplot as plt
+import seaborn as sns
 import itertools
 import json
 import time
@@ -68,7 +69,7 @@ class H100TabNetOptimizer:
         if len(X) > max_optimization_size:
             print(f"  📊 Using subset of {max_optimization_size:,} for optimization")
             indices = np.random.choice(len(X), max_optimization_size, replace=False)
-            X, y = X[indices], y[indices]
+            X, y = X.iloc[indices], y[indices]
         
         print(f"✅ Optimization data ready: {len(X):,} variants, {X.shape[1]} features")
         return X, y
@@ -181,7 +182,8 @@ class H100TabNetOptimizer:
                     n_a=config['n_a'],
                     n_steps=config['n_steps'],
                     gamma=config['gamma'],
-                    lambda_sparse=config['lambda_sparse']
+                    lambda_sparse=config['lambda_sparse'],
+                    learning_rate=config['learning_rate']
                 )
                 
                 # Update learning rate in model
@@ -252,6 +254,8 @@ class H100TabNetOptimizer:
             save_frequency: Save results every N configurations
             target_configs: Stop early if we find this many target-meeting configs
         """
+        global config
+        
         print("🚀 Starting H100 TabNet Hyperparameter Optimization")
         print("=" * 70)
         print(f"GPU Budget: {self.gpu_hours_budget} hours")
@@ -297,6 +301,10 @@ class H100TabNetOptimizer:
                 # Save intermediate results
                 if (i + 1) % save_frequency == 0:
                     self._save_intermediate_results()
+
+                if (self.completed_configs % save_frequency == 0) and self.completed_configs > 0:
+                    print(f"\n📊 Progress Update: {self.completed_configs} configurations completed")
+                    self.save_optimization_heatmaps()  # Generate intermediate heat maps                    
                 
                 # Early stopping if we have enough good configs
                 if target_meeting_configs >= target_configs:
@@ -310,7 +318,10 @@ class H100TabNetOptimizer:
         
         # Final results processing
         self._finalize_optimization()
-        
+
+        print("\n📊 GENERATING FINAL HEAT MAPS")
+        final_heatmaps = self.create_hyperparameter_heatmaps(self.optimization_results)        
+
         return self.optimization_results
     
     def _save_intermediate_results(self):
@@ -432,6 +443,126 @@ class H100TabNetOptimizer:
             f.write("=" * 70 + "\n")
         
         print(f"📊 Optimization report saved: {report_file}")
+
+    def create_hyperparameter_heatmaps(self, results):
+        """Create comprehensive heat map visualizations for hyperparameter tracking"""
+        print("\n📊 GENERATING HYPERPARAMETER HEAT MAPS")
+        print("-" * 40)
+        
+        if len(results) < 4:
+            print("⚠️ Insufficient results for heat map generation")
+            return []
+        
+        # Convert results to DataFrame
+        df = pd.DataFrame([
+            {
+                **result['config'],
+                'accuracy': result['mean_accuracy'],
+                'std_accuracy': result['std_accuracy'],
+                'training_time': result['training_time'],
+                'meets_target': result['meets_target']
+            }
+            for result in results
+        ])
+        
+        heatmap_files = []
+        
+        # 1. Architecture Heat Map (n_d vs n_a)
+        plt.figure(figsize=(10, 8))
+        pivot1 = df.pivot_table(values='accuracy', index='n_d', columns='n_a', aggfunc='mean')
+        sns.heatmap(pivot1, annot=True, fmt='.3f', cmap='viridis', cbar_kws={'label': 'Accuracy'})
+        plt.title('TabNet Architecture: Decision Width (n_d) vs Attention Width (n_a)', fontsize=14)
+        plt.xlabel('Attention Width (n_a)')
+        plt.ylabel('Decision Width (n_d)')
+        
+        heatmap_file1 = self.results_dir / "heatmap_architecture.png"
+        plt.savefig(heatmap_file1, dpi=300, bbox_inches='tight')
+        plt.close()
+        heatmap_files.append(heatmap_file1)
+        
+        # 2. Learning Dynamics Heat Map (learning_rate vs gamma)
+        plt.figure(figsize=(10, 8))
+        pivot2 = df.pivot_table(values='accuracy', index='learning_rate', columns='gamma', aggfunc='mean')
+        sns.heatmap(pivot2, annot=True, fmt='.3f', cmap='plasma', cbar_kws={'label': 'Accuracy'})
+        plt.title('Learning Dynamics: Learning Rate vs Feature Reuse (Gamma)', fontsize=14)
+        plt.xlabel('Feature Reuse Parameter (gamma)')
+        plt.ylabel('Learning Rate')
+        
+        heatmap_file2 = self.results_dir / "heatmap_learning_dynamics.png"
+        plt.savefig(heatmap_file2, dpi=300, bbox_inches='tight')
+        plt.close()
+        heatmap_files.append(heatmap_file2)
+        
+        # 3. Regularization Heat Map (n_steps vs lambda_sparse)
+        plt.figure(figsize=(10, 8))
+        pivot3 = df.pivot_table(values='accuracy', index='n_steps', columns='lambda_sparse', aggfunc='mean')
+        sns.heatmap(pivot3, annot=True, fmt='.3f', cmap='coolwarm', cbar_kws={'label': 'Accuracy'})
+        plt.title('Regularization: Decision Steps vs Sparsity (Lambda)', fontsize=14)
+        plt.xlabel('Sparsity Parameter (lambda_sparse)')
+        plt.ylabel('Decision Steps (n_steps)')
+        
+        heatmap_file3 = self.results_dir / "heatmap_regularization.png"
+        plt.savefig(heatmap_file3, dpi=300, bbox_inches='tight')
+        plt.close()
+        heatmap_files.append(heatmap_file3)
+        
+        # 4. Performance Summary Heat Map
+        plt.figure(figsize=(12, 8))
+        
+        # Create a comprehensive view
+        # Use n_d and learning_rate as primary axes
+        pivot4 = df.pivot_table(values='accuracy', index='n_d', columns='learning_rate', aggfunc='mean')
+        sns.heatmap(pivot4, annot=True, fmt='.3f', cmap='RdYlGn', 
+                   cbar_kws={'label': 'Accuracy'}, center=0.82)
+        plt.title('Performance Overview: Architecture vs Learning Rate\n(Target: 82% accuracy)', fontsize=14)
+        plt.xlabel('Learning Rate')
+        plt.ylabel('Decision Width (n_d)')
+        
+        # Add target line annotation
+        plt.axhline(y=0.82, color='red', linestyle='--', alpha=0.7, label='Target: 82%')
+        
+        heatmap_file4 = self.results_dir / "heatmap_performance_overview.png"
+        plt.savefig(heatmap_file4, dpi=300, bbox_inches='tight')
+        plt.close()
+        heatmap_files.append(heatmap_file4)
+        
+        # 5. Training Efficiency Heat Map (accuracy vs training_time)
+        plt.figure(figsize=(10, 8))
+        
+        # Create efficiency score (accuracy / log(training_time))
+        df['efficiency'] = df['accuracy'] / np.log(df['training_time'] + 1)
+        pivot5 = df.pivot_table(values='efficiency', index='n_d', columns='n_a', aggfunc='mean')
+        sns.heatmap(pivot5, annot=True, fmt='.3f', cmap='viridis', 
+                   cbar_kws={'label': 'Efficiency Score'})
+        plt.title('Training Efficiency: Accuracy per Log(Training Time)', fontsize=14)
+        plt.xlabel('Attention Width (n_a)')
+        plt.ylabel('Decision Width (n_d)')
+        
+        heatmap_file5 = self.results_dir / "heatmap_efficiency.png"
+        plt.savefig(heatmap_file5, dpi=300, bbox_inches='tight')
+        plt.close()
+        heatmap_files.append(heatmap_file5)
+        
+        print(f"✅ Generated {len(heatmap_files)} heat map visualizations")
+        return heatmap_files
+    
+    def save_optimization_heatmaps(self):
+        """Save heat maps during optimization progress"""
+        if len(self.optimization_results) >= 10:  # Minimum results for meaningful visualization
+            heatmap_files = self.create_hyperparameter_heatmaps(self.optimization_results)
+            
+            # Save current progress
+            progress_file = self.results_dir / "optimization_progress.json"
+            with open(progress_file, 'w') as f:
+                json.dump({
+                    'completed_configs': len(self.optimization_results),
+                    'best_accuracy': max(r['mean_accuracy'] for r in self.optimization_results),
+                    'target_meeting_configs': len([r for r in self.optimization_results if r['meets_target']]),
+                    'heatmap_files': [str(f) for f in heatmap_files]
+                }, f, indent=2)
+            
+            return heatmap_files
+        return []        
 
 def main():
     """
