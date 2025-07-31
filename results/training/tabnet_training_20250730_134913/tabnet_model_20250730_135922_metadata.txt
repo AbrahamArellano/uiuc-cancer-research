@@ -1,6 +1,6 @@
 TabNet Prostate Cancer Variant Classifier
 ==================================================
-Saved: 2025-07-28 07:23:12
+Saved: 2025-07-30 13:59:22
 Features: 56
 Architecture: n_d=64, n_a=64, n_steps=6
 Classes: [np.str_('Benign'), np.str_('Pathogenic'), np.str_('VUS')]

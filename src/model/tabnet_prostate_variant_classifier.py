@@ -575,6 +575,11 @@ class ProstateVariantTabNet:
             pickle.dump(model_data, f)
         
         print(f"✅ Model saved to: {model_path}")
+
+        # TabNet native save
+        tabnet_path = model_path.replace('.pkl', '_tabnet')
+        self.model.save_model(tabnet_path)
+        print(f"✅ TabNet native model saved to: {tabnet_path}.zip")
         
         # Save model metadata
         metadata_path = model_path.replace('.pkl', '_metadata.txt')
@@ -598,7 +603,8 @@ class ProstateVariantTabNet:
             raise FileNotFoundError(f"Model file not found: {model_path}")
         
         with open(model_path, 'rb') as f:
-            model_data = pickle.load(f)
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            model_data = torch.load(f, map_location=device, weights_only=False)
         
         # Restore all components
         self.model = model_data['tabnet_model']
@@ -674,6 +680,27 @@ def main():
     
     # Save the trained model
     tabnet.save_model(model_path)
+
+    # Quick model loading validation
+    print(f"\n🔍 VALIDATING MODEL LOADING...")
+    try:
+        # Test pickle loading (current method)
+        test_tabnet = ProstateVariantTabNet()
+        test_tabnet.load_model(model_path)
+        
+        # Test TabNet native loading (new method)
+        tabnet_path = model_path.replace('.pkl', '_tabnet.zip')
+        test_model = TabNetClassifier()
+        test_model.load_model(tabnet_path)
+        
+        print(f"✅ Both loading methods validated successfully")
+        
+        # Quick prediction test
+        test_pred = test_tabnet.model.predict(tabnet.scaler.transform(X_test[:5]))
+        print(f"✅ Model prediction test passed")
+        
+    except Exception as e:
+        print(f"⚠️  Model loading validation failed: {e}")    
     
     # Print final results
     print(f"\n🎯 FINAL RESULTS:")
