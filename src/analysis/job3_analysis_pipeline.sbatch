@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=analysis_pipeline
 #SBATCH --account=aa107-ic
-#SBATCH --partition=eng-research
+#SBATCH --partition=IllinoisComputes
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=16G
-#SBATCH --time=15:00
+#SBATCH --mem=32G
+#SBATCH --time=30:00
 #SBATCH --output=/u/aa107/uiuc-cancer-research/src/analysis/analysis_pipeline_%j.out
 #SBATCH --error=/u/aa107/uiuc-cancer-research/src/analysis/analysis_pipeline_%j.err
 
@@ -62,6 +62,14 @@ if [ ! -d "$ATTENTION_DIR" ]; then
 else
     ATTENTION_FILES=$(find "$ATTENTION_DIR" -name "*.csv" | wc -l)
     echo "✅ Attention weights found: $ATTENTION_FILES files in $ATTENTION_DIR"
+fi
+
+# Verify Job 2 completed fully (should have 16+ individual files + 3 summaries)
+EXPECTED_FILES=19
+ACTUAL_FILES=$(find "$ATTENTION_DIR" -name "*.csv" -o -name "*.json" | wc -l)
+if [ $ACTUAL_FILES -lt $EXPECTED_FILES ]; then
+    echo "❌ Incomplete Job 2 results: $ACTUAL_FILES/$EXPECTED_FILES files"
+    exit 1
 fi
 
 # Check selected variants from Job 1

@@ -1,0 +1,15 @@
+TABNET DECISION STEP ATTENTION PATTERNS
+=============================================
+
+Summary of attention evolution across TabNet decision steps
+
+11:108244877:TG:T:
+
+11:108343320:A:G:
+
+13:32325192:G:A:
+
+13:32339596:CA:C:
+
+16:2061860:T:C:
+

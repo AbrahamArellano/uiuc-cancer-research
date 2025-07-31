@@ -26,7 +26,7 @@ class FeatureImportanceComparison:
     def __init__(self, model_path=None, analysis_dir=None):
         """Initialize comparison analyzer"""
         if model_path is None:
-            self.model_path = "/u/aa107/scratch/tabnet_model_20250727_053446.pkl"
+            self.model_path = "/u/aa107/scratch/tabnet_model_20250731_032824.pkl"
         else:
             self.model_path = model_path
             

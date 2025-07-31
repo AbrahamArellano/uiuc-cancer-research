@@ -141,7 +141,7 @@ class AttentionAnalyzer:
         print("\n🔍 ANALYZING PATHOGENIC VS BENIGN DIFFERENCES")
         print("-" * 50)
         
-        if not self.summary_df is not None:
+        if self.summary_df is None:
             print("❌ No summary data available")
             return {}
         
