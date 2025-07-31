@@ -157,13 +157,13 @@ class ResultsGenerator:
             for _, row in pathogenic_df.iterrows():
                 variant_id = row['variant_id']
                 if variant_id in self.attention_data:
-                    top_features = self.attention_data[variant_id].nlargest(5, 'global_importance')['feature'].tolist()
+                    top_features = self.attention_data[variant_id].nlargest(5, 'attention_weight')['feature'].tolist()
                     pathogenic_features.update(top_features)
             
             for _, row in benign_df.iterrows():
                 variant_id = row['variant_id']
                 if variant_id in self.attention_data:
-                    top_features = self.attention_data[variant_id].nlargest(5, 'global_importance')['feature'].tolist()
+                    top_features = self.attention_data[variant_id].nlargest(5, 'attention_weight')['feature'].tolist()
                     benign_features.update(top_features)
             
             overlap = pathogenic_features & benign_features
@@ -194,7 +194,7 @@ class ResultsGenerator:
         total_top_positions = 0
         
         for variant_id, attention_df in self.attention_data.items():
-            top_10 = attention_df.nlargest(10, 'global_importance')
+            top_10 = attention_df.nlargest(10, 'attention_weight')
             top_10_features = set(top_10['feature'].tolist())
             
             vep_in_this_variant = len(top_10_features & self.vep_features)
@@ -259,7 +259,7 @@ class ResultsGenerator:
         
         for variant_id, attention_df in self.attention_data.items():
             # Sort by importance
-            sorted_df = attention_df.sort_values('global_importance', ascending=False).reset_index(drop=True)
+            sorted_df = attention_df.sort_values('attention_weight', ascending=False).reset_index(drop=True)
             
             # Find ranks of AlphaMissense features
             for am_feature in am_features:
@@ -312,7 +312,7 @@ class ResultsGenerator:
             {
                 'Question': 'Q1: Feature differences between pathogenic/benign',
                 'Result': validation_results['q1_feature_differences']['answer'],
-                'Details': f"{validation_results['q1_feature_differences'].get('overlap_percentage', 'N/A'):.1f}% overlap"
+                'Details': f"{validation_results['q1_feature_differences'].get('overlap_percentage', 0):.1f}% overlap" if 'overlap_percentage' in validation_results['q1_feature_differences'] else "N/A - insufficient data"
             },
             {
                 'Question': 'Q2: VEP features get high attention',
@@ -353,7 +353,7 @@ class ResultsGenerator:
         for variant_id, attention_df in self.attention_data.items():
             for _, row in attention_df.iterrows():
                 feature = row['feature']
-                importance = row['global_importance']
+                importance = row['attention_weight']
                 tier = self.feature_to_group.get(feature, 'unknown')
                 
                 if tier not in tier_importance:
@@ -413,7 +413,7 @@ class ResultsGenerator:
         # 2. Attention distribution histogram
         all_importances = []
         for variant_id, attention_df in self.attention_data.items():
-            all_importances.extend(attention_df['global_importance'].tolist())
+            all_importances.extend(attention_df['attention_weight'].tolist())
         
         if all_importances:
             fig, ax = plt.subplots(figsize=(10, 6))
@@ -480,7 +480,7 @@ class ResultsGenerator:
                     tier = self.feature_to_group.get(row['feature'], 'unknown')
                     if tier not in tier_stats:
                         tier_stats[tier] = []
-                    tier_stats[tier].append(row['global_importance'])
+                    tier_stats[tier].append(row['attention_weight'])
             
             f.write("Average attention by feature tier:\n\n")
             for tier in sorted([t for t in tier_stats.keys() if t.startswith('tier')]):

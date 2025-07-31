@@ -170,7 +170,7 @@ class AttentionAnalyzer:
                 attention_df = self.attention_data[variant_id]
                 for _, att_row in attention_df.iterrows():
                     feature = att_row['feature']
-                    importance = att_row['global_importance']
+                    importance = att_row['attention_weight']
                     if feature not in pathogenic_attention:
                         pathogenic_attention[feature] = []
                     pathogenic_attention[feature].append(importance)
@@ -182,7 +182,7 @@ class AttentionAnalyzer:
                 attention_df = self.attention_data[variant_id]
                 for _, att_row in attention_df.iterrows():
                     feature = att_row['feature']
-                    importance = att_row['global_importance']
+                    importance = att_row['attention_weight']
                     if feature not in benign_attention:
                         benign_attention[feature] = []
                     benign_attention[feature].append(importance)
@@ -279,7 +279,7 @@ class AttentionAnalyzer:
                     attention_df = self.attention_data[variant_id]
                     group_features = attention_df[attention_df['feature_group'] == group_name]
                     if not group_features.empty:
-                        pathogenic_imp.extend(group_features['global_importance'].tolist())
+                        pathogenic_imp.extend(group_features['attention_weight'].tolist())
             
             # Collect benign importance
             for _, row in benign_df.iterrows():
@@ -288,7 +288,7 @@ class AttentionAnalyzer:
                     attention_df = self.attention_data[variant_id]
                     group_features = attention_df[attention_df['feature_group'] == group_name]
                     if not group_features.empty:
-                        benign_imp.extend(group_features['global_importance'].tolist())
+                        benign_imp.extend(group_features['attention_weight'].tolist())
             
             if pathogenic_imp and benign_imp:
                 group_stats[group_name] = {
@@ -414,7 +414,7 @@ class AttentionAnalyzer:
                             att_df = self.attention_data[variant_id]
                             for _, att_row in att_df.head(10).iterrows():
                                 feature = att_row['feature']
-                                importance = att_row['global_importance']
+                                importance = att_row['attention_weight']
                                 
                                 if feature not in all_features:
                                     all_features[feature] = {'Pathogenic': [], 'Benign': []}

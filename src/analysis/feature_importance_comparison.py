@@ -181,7 +181,7 @@ class FeatureImportanceComparison:
                 df = pd.read_csv(filepath)
                 for _, row in df.iterrows():
                     feature = row['feature']
-                    importance = row['global_importance']
+                    importance = row['attention_weight']
                     
                     if feature not in feature_importance_sum:
                         feature_importance_sum[feature] = 0
@@ -556,7 +556,7 @@ class FeatureImportanceComparison:
             
             f.write("### Methodology\n\n")
             f.write("1. **Training Importance**: Extracted from TabNet model feature_importances_\n")
-            f.write("2. **Attention Importance**: Averaged global_importance across all variants\n")
+            f.write("2. **Attention Importance**: Averaged attention_weight across all variants\n")
             f.write("3. **Normalization**: Both sets normalized to sum to 1.0\n")
             f.write("4. **Comparison**: Pearson and Spearman correlations calculated\n\n")
             
