@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:H200:1
 #SBATCH --time=30:00
 #SBATCH --output=/u/aa107/uiuc-cancer-research/src/analysis/attention_extraction_%j.out
 #SBATCH --error=/u/aa107/uiuc-cancer-research/src/analysis/attention_extraction_%j.err
@@ -67,7 +67,7 @@ else
 fi
 
 # Check TabNet model
-MODEL_PATH="/u/aa107/uiuc-cancer-research/results/training/tabnet_training_20250728_075348/tabnet_model_20250728_072312.pkl"
+MODEL_PATH="/u/aa107/scratch/tabnet_model_20250731_032824_tabnet.zip"
 if [ ! -f "$MODEL_PATH" ]; then
     echo "❌ TabNet model not found: $MODEL_PATH"
     exit 1
