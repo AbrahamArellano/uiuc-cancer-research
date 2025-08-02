@@ -25,7 +25,10 @@ sys.path.append('/u/aa107/uiuc-cancer-research/src/model')
 sys.path.append('/u/aa107/uiuc-cancer-research')
 
 from tabnet_prostate_variant_classifier import ProstateVariantTabNet
-from config.pipeline_config import config
+from config.pipeline_config import PipelineConfig
+
+# Create config instance
+config = PipelineConfig()
 
 class H100TabNetOptimizer:
     """
@@ -144,20 +147,19 @@ class H100TabNetOptimizer:
         print("🎯 Configurations prioritized by expected performance")
         return prioritized
     
-    def evaluate_configuration(self, config, cv_folds=3, max_epochs=100):
+    def evaluate_configuration(self, hyperparams, cv_folds=3):
         """
         Evaluate a single hyperparameter configuration using cross-validation
-        
+
         Args:
-            config: Hyperparameter configuration dictionary
+            hyperparams: Hyperparameter configuration dictionary
             cv_folds: Number of CV folds for evaluation
-            max_epochs: Maximum training epochs per fold
             
         Returns:
             results: Dictionary with evaluation metrics
         """
-        print(f"⚙️  Evaluating config: n_d={config['n_d']}, n_a={config['n_a']}, "
-              f"steps={config['n_steps']}, lr={config['learning_rate']}")
+        print(f"⚙️  Evaluating config: n_d={hyperparams['n_d']}, n_a={hyperparams['n_a']}, "
+                f"steps={hyperparams['n_steps']}, lr={hyperparams['learning_rate']}")
         
         cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
         
@@ -172,29 +174,22 @@ class H100TabNetOptimizer:
             fold_start = time.time()
             
             # Split data
-            X_train, X_val = self.X[train_idx], self.X[val_idx]
+            X_train, X_val = self.X.iloc[train_idx], self.X.iloc[val_idx]
             y_train, y_val = self.y[train_idx], self.y[val_idx]
             
             try:
                 # Create model with current configuration
                 model = ProstateVariantTabNet(
-                    n_d=config['n_d'],
-                    n_a=config['n_a'],
-                    n_steps=config['n_steps'],
-                    gamma=config['gamma'],
-                    lambda_sparse=config['lambda_sparse'],
-                    learning_rate=config['learning_rate']
+                    n_d=hyperparams['n_d'],
+                    n_a=hyperparams['n_a'],
+                    n_steps=hyperparams['n_steps'],
+                    gamma=hyperparams['gamma'],
+                    lambda_sparse=hyperparams['lambda_sparse'],
+                    learning_rate=hyperparams['learning_rate']
                 )
-                
-                # Update learning rate in model
-                model.model = None  # Reset model to apply new LR
                 
                 # Train with current config
-                val_accuracy = model.train(
-                    X_train, y_train, X_val, y_val,
-                    max_epochs=max_epochs,
-                    patience=10  # Reduced patience for optimization
-                )
+                val_accuracy = model.train(X_train, y_train, X_val, y_val)
                 
                 # Evaluate
                 y_pred = model.predict(X_val)
@@ -215,7 +210,7 @@ class H100TabNetOptimizer:
                 fold_time = time.time() - fold_start
                 fold_times.append(fold_time)
                 
-                print(f"    Fold {fold + 1}: accuracy={accuracy:.3f}, time={fold_time:.1f}s")
+                print(f"    Fold {fold + 1}: accuracy={accuracy:.3f}, f1={f1:.3f}, auc={auc:.3f}, time={fold_time:.1f}s")
                 
             except Exception as e:
                 print(f"    ❌ Fold {fold + 1} failed: {e}")
@@ -228,7 +223,7 @@ class H100TabNetOptimizer:
         config_time = time.time() - config_start_time
         
         results = {
-            'config': config,
+            'config': hyperparams,
             'mean_accuracy': np.mean(fold_accuracies),
             'std_accuracy': np.std(fold_accuracies),
             'mean_f1': np.mean(fold_f1s),
@@ -238,11 +233,15 @@ class H100TabNetOptimizer:
             'fold_aucs': fold_aucs,
             'training_time': config_time,
             'avg_fold_time': np.mean(fold_times),
-            'meets_target': np.mean(fold_accuracies) >= config.TARGET_ACCURACY,
+            'meets_target': (
+                np.mean(fold_accuracies) >= config.TARGET_ACCURACY and  # 82% accuracy
+                np.mean(fold_f1s) >= 0.80 and                          # 80% F1-score  
+                np.mean(fold_aucs) >= 0.85                             # 85% AUC-ROC
+            ),
             'timestamp': datetime.now().isoformat()
         }
         
-        print(f"  ✅ Config result: {results['mean_accuracy']:.3f} ± {results['std_accuracy']:.3f}")
+        print(f"  ✅ Config result: acc={results['mean_accuracy']:.3f}±{results['std_accuracy']:.3f}, f1={results['mean_f1']:.3f}, auc={results['mean_auc']:.3f}, target={'✅' if results['meets_target'] else '❌'}")
         
         return results
     
@@ -274,7 +273,7 @@ class H100TabNetOptimizer:
         # Track progress
         target_meeting_configs = 0
         
-        for i, config in enumerate(configurations):
+        for i, hyperparams in enumerate(configurations):
             # Check time budget
             elapsed_hours = (time.time() - self.start_time) / 3600
             if elapsed_hours >= self.gpu_hours_budget:
@@ -286,7 +285,7 @@ class H100TabNetOptimizer:
             
             # Evaluate configuration
             try:
-                results = self.evaluate_configuration(config)
+                results = self.evaluate_configuration(hyperparams)
                 self.optimization_results.append(results)
                 self.completed_configs += 1
                 

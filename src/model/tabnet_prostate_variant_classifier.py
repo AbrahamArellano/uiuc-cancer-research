@@ -421,6 +421,23 @@ class ProstateVariantTabNet:
         print(f"✅ Training completed. Validation accuracy: {accuracy:.3f}")
         return accuracy
 
+    def predict(self, X):
+        """Predict class labels"""
+        if self.model is None:
+            raise ValueError("Model not trained yet. Call train() first.")
+        
+        X_scaled = self.scaler.transform(X)
+        predictions = self.model.predict(X_scaled)
+        return self.label_encoder.inverse_transform(predictions)
+
+    def predict_proba(self, X):
+        """Predict class probabilities"""
+        if self.model is None:
+            raise ValueError("Model not trained yet. Call train() first.")
+        
+        X_scaled = self.scaler.transform(X)
+        return self.model.predict_proba(X_scaled)
+
     def cross_validate(self, X, y, cv_folds=5):
         """Perform cross-validation"""
         print(f"🔄 RUNNING {cv_folds}-FOLD CROSS-VALIDATION...")

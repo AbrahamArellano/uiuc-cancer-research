@@ -1,0 +1,64 @@
+======================================================================
+H100 TABNET HYPERPARAMETER OPTIMIZATION REPORT
+======================================================================
+
+Optimization Date: 2025-08-02 05:07:09
+Total Configurations Evaluated: 5
+Target Accuracy: 82.0%
+Configurations Meeting Target: 5
+Optimization Time: 0.5 hours
+
+Best Accuracy Achieved: 0.891 ± 0.000
+Best Configuration:
+  n_d: 64
+  n_a: 64
+  n_steps: 6
+  gamma: 1.3
+  lambda_sparse: 0.001
+  learning_rate: 0.01
+
+TOP 5 CONFIGURATIONS:
+--------------------------------------------------
+1. Accuracy: 0.891 ± 0.000
+   Config: n_d=64, n_a=64, steps=6, lr=0.01
+   Target Met: ✅
+
+2. Accuracy: 0.890 ± 0.002
+   Config: n_d=128, n_a=128, steps=6, lr=0.002
+   Target Met: ✅
+
+3. Accuracy: 0.885 ± 0.002
+   Config: n_d=64, n_a=64, steps=7, lr=0.01
+   Target Met: ✅
+
+4. Accuracy: 0.883 ± 0.008
+   Config: n_d=64, n_a=64, steps=6, lr=0.002
+   Target Met: ✅
+
+5. Accuracy: 0.872 ± 0.016
+   Config: n_d=64, n_a=64, steps=7, lr=0.002
+   Target Met: ✅
+
+CONFIGURATIONS MEETING TARGET:
+--------------------------------------------------
+1. Accuracy: 0.891 ± 0.000
+   Training Time: 321.4 seconds
+   Config: n_d=64, n_a=64, n_steps=6, gamma=1.3, lambda_sparse=0.001, learning_rate=0.01
+
+2. Accuracy: 0.890 ± 0.002
+   Training Time: 374.0 seconds
+   Config: n_d=128, n_a=128, n_steps=6, gamma=1.3, lambda_sparse=0.001, learning_rate=0.002
+
+3. Accuracy: 0.885 ± 0.002
+   Training Time: 358.0 seconds
+   Config: n_d=64, n_a=64, n_steps=7, gamma=1.3, lambda_sparse=0.001, learning_rate=0.01
+
+4. Accuracy: 0.883 ± 0.008
+   Training Time: 320.7 seconds
+   Config: n_d=64, n_a=64, n_steps=6, gamma=1.3, lambda_sparse=0.001, learning_rate=0.002
+
+5. Accuracy: 0.872 ± 0.016
+   Training Time: 386.8 seconds
+   Config: n_d=64, n_a=64, n_steps=7, gamma=1.3, lambda_sparse=0.001, learning_rate=0.002
+
+======================================================================
