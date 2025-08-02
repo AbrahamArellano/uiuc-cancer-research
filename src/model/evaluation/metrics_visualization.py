@@ -23,8 +23,8 @@ metrics = ["BalAcc", "Kappa", "F1_w", "AUC"]
 # Scores are from the latest evaluation run sourced from results/metrics/all_metrics_TIME_STAMP.txt
 # Later, we will read the scores from the file
 scores = {
-    "TabNet":  [0.3320, -0.0029, 0.1298, 0.4986],
-    "LogReg":  [0.7033, 0.5393, 0.7374, 0.8610],
+    "TabNet":  [0.8905, 0.8263, 0.8991, 0.9701],  # 🎉 Updated with optimized model
+    "LogReg":  [0.7033, 0.5394, 0.7375, 0.8610],
     "XGBoost": [0.9059, 0.8494, 0.9125, 0.9778],
 }
 
