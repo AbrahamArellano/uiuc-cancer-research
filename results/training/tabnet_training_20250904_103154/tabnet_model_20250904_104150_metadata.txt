@@ -1,0 +1,16 @@
+TabNet Prostate Cancer Variant Classifier
+==================================================
+Saved: 2025-09-04 10:41:51
+Features: 56
+Architecture: n_d=64, n_a=64, n_steps=6
+Classes: [np.str_('Benign'), np.str_('Pathogenic'), np.str_('VUS')]
+
+Feature Groups:
+  tier1_vep_corrected: 4 features
+  tier2_core_vep: 10 features
+  tier3_alphamissense: 2 features
+  tier4_population: 17 features
+  tier5_functional: 6 features
+  tier6_clinical: 5 features
+  tier7_variant_props: 8 features
+  tier8_prostate_biology: 4 features

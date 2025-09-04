@@ -29,6 +29,9 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.ensemble import RandomForestClassifier
 from pytorch_tabnet.tab_model import TabNetClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC  
+from sklearn.neural_network import MLPClassifier
 from xgboost import XGBClassifier
 from sklearn.metrics import (
     balanced_accuracy_score,
@@ -852,6 +855,67 @@ def evaluate_models(
         kappa=cohen_kappa_score(y_test_enc, y_pred_xgb),
         f1=f1_score(y_test_enc, y_pred_xgb, average="weighted"),
         auc=roc_auc_score(y_test_bin, proba_xgb, average="macro", multi_class="ovr"),
+    )
+
+    # ---- Random Forest baseline ----
+    rf = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=10,
+        random_state=42,
+        n_jobs=-1,
+        class_weight='balanced'  # Handle class imbalance
+    )
+    rf.fit(scaler.transform(X_train), y_train_enc)
+    y_pred_rf = rf.predict(scaler.transform(X_test))
+    proba_rf = rf.predict_proba(scaler.transform(X_test))
+    metrics["RandomForest"] = dict(
+        bal_acc=balanced_accuracy_score(y_test_enc, y_pred_rf),
+        kappa=cohen_kappa_score(y_test_enc, y_pred_rf),
+        f1=f1_score(y_test_enc, y_pred_rf, average="weighted"),
+        auc=roc_auc_score(y_test_bin, proba_rf, average="macro", multi_class="ovr"),
+    )    
+
+    # ---- SVM baseline ----
+    svm = SVC(
+        kernel='rbf',
+        probability=True,  # Required for predict_proba
+        random_state=42,
+        class_weight='balanced',
+        C=1.0,
+        gamma='scale'
+    )
+    svm.fit(scaler.transform(X_train), y_train_enc)
+    y_pred_svm = svm.predict(scaler.transform(X_test))
+    proba_svm = svm.predict_proba(scaler.transform(X_test))
+    metrics["SVM"] = dict(
+        bal_acc=balanced_accuracy_score(y_test_enc, y_pred_svm),
+        kappa=cohen_kappa_score(y_test_enc, y_pred_svm),
+        f1=f1_score(y_test_enc, y_pred_svm, average="weighted"),
+        auc=roc_auc_score(y_test_bin, proba_svm, average="macro", multi_class="ovr"),
+    )
+
+    # ---- MLP baseline ----
+    mlp = MLPClassifier(
+        hidden_layer_sizes=(128, 64, 32),
+        activation='relu',
+        solver='adam',
+        alpha=0.001,  # L2 regularization
+        batch_size=256,
+        learning_rate_init=0.001,
+        max_iter=500,
+        early_stopping=True,
+        validation_fraction=0.1,
+        n_iter_no_change=20,
+        random_state=42
+    )
+    mlp.fit(scaler.transform(X_train), y_train_enc)
+    y_pred_mlp = mlp.predict(scaler.transform(X_test))
+    proba_mlp = mlp.predict_proba(scaler.transform(X_test))
+    metrics["MLP"] = dict(
+        bal_acc=balanced_accuracy_score(y_test_enc, y_pred_mlp),
+        kappa=cohen_kappa_score(y_test_enc, y_pred_mlp),
+        f1=f1_score(y_test_enc, y_pred_mlp, average="weighted"),
+        auc=roc_auc_score(y_test_bin, proba_mlp, average="macro", multi_class="ovr"),
     )
 
     # ---- Persist metrics ----
