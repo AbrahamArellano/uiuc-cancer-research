@@ -1,6 +1,6 @@
 # TCGA-PRAD Data Processing Pipeline
 
-This project implements a data processing pipeline for analyzing TCGA-PRAD (The Cancer Genome Atlas Prostate Adenocarcinoma) dataset, integrating clinical, biospecimen, and medical imaging data.
+The project here implements a data processing pipeline for analyzing TCGA-PRAD (The Cancer Genome Atlas Prostate Adenocarcinoma) dataset, integrating clinical, biospecimen, and medical imaging data.
 
 ## Project Structure
 
