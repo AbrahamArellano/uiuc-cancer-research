@@ -38,8 +38,15 @@ safe_install <- function(package, source = "CRAN") {
 # Install required packages
 tryCatch({
   safe_install("devtools")
-  safe_install("PoisonAlien/TCGAmutations", source = "GitHub")
-  
+
+  # Install TCGAmutations from GitHub (package name is just "TCGAmutations")
+  if (!require("TCGAmutations", character.only = TRUE, quietly = TRUE)) {
+    cat("📦 Installing TCGAmutations from GitHub\n")
+    devtools::install_github("PoisonAlien/TCGAmutations")
+  } else {
+    cat("✅ TCGAmutations already installed\n")
+  }
+
   library(TCGAmutations)
   cat("✅ All packages loaded successfully\n\n")
   
@@ -49,11 +56,30 @@ tryCatch({
   quit(status = 1)
 })
 
-# Create output directory
-output_dir <- "../../data/raw/variants"
+# Create output directory (use absolute path based on script location)
+script_dir <- tryCatch({
+  dirname(sys.frame(1)$ofile)
+}, error = function(e) {
+  getwd()
+})
+
+# Handle case when running via Rscript
+if (is.null(script_dir) || script_dir == "") {
+  script_dir <- getwd()
+}
+
+# Build path relative to project root
+output_dir <- file.path(dirname(dirname(script_dir)), "data", "raw", "variants")
+
+# Fallback: if that doesn't exist, use relative to current working directory
+if (!grepl("uiuc-cancer-research", output_dir)) {
+  output_dir <- file.path(getwd(), "data", "raw", "variants")
+}
+
+cat("📁 Output directory:", output_dir, "\n")
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
-  cat("📁 Created output directory:", output_dir, "\n")
+  cat("📁 Created output directory\n")
 }
 
 # Download TCGA-PRAD mutations
@@ -61,37 +87,35 @@ cat("🔄 Downloading TCGA-PRAD mutations from MC3 dataset...\n")
 cat("This may take several minutes...\n")
 
 tryCatch({
-  # Download the data
-  tcga_load(study = "PRAD", source = "MC3")
-  
-  # The tcga_load function creates objects in the global environment
-  # Check what objects were created
-  prad_objects <- ls(pattern = "prad|PRAD", envir = .GlobalEnv)
-  cat("📊 TCGA objects created:", paste(prad_objects, collapse = ", "), "\n")
-  
-  # Get the mutation data (try different possible object names)
-  if (exists("prad_mc3")) {
-    prad_mutations <- prad_mc3@data
-    cat("✅ Using prad_mc3 object\n")
-  } else if (exists("tcga_prad_mc3")) {
-    prad_mutations <- tcga_prad_mc3@data
-    cat("✅ Using tcga_prad_mc3 object\n")
-  } else if (exists("PRAD_mc3")) {
-    prad_mutations <- PRAD_mc3@data
-    cat("✅ Using PRAD_mc3 object\n")
+  # Download the data - tcga_load returns the MAF object directly
+  prad_maf <- tcga_load(study = "PRAD", source = "MC3")
+
+  cat("📊 TCGA data loaded successfully\n")
+  cat("📊 Object class:", class(prad_maf), "\n")
+
+  # Extract mutation data from MAF object
+  if (inherits(prad_maf, "MAF")) {
+    prad_mutations <- prad_maf@data
+    cat("✅ Extracted data from MAF object\n")
+  } else if (is.data.frame(prad_maf)) {
+    prad_mutations <- prad_maf
+    cat("✅ Data is already a data frame\n")
   } else {
-    # List all objects to help debug
-    all_objects <- ls(envir = .GlobalEnv)
-    cat("🔍 Available objects:", paste(all_objects, collapse = ", "), "\n")
-    stop("Could not find TCGA-PRAD mutation object")
+    # Try to access data slot directly
+    prad_mutations <- tryCatch({
+      slot(prad_maf, "data")
+    }, error = function(e) {
+      as.data.frame(prad_maf)
+    })
+    cat("✅ Converted to data frame\n")
   }
-  
+
   cat("📊 Raw mutations loaded:", nrow(prad_mutations), "mutations\n")
   cat("📊 Columns available:", ncol(prad_mutations), "columns\n")
-  
+
   # Display first few column names to verify structure
   cat("🔍 First 10 columns:", paste(head(colnames(prad_mutations), 10), collapse = ", "), "\n")
-  
+
 }, error = function(e) {
   cat("❌ TCGA download failed:", conditionMessage(e), "\n")
   cat("💡 Check internet connectivity and TCGA server status\n")
@@ -132,6 +156,11 @@ column_mapping <- sapply(required_columns, find_column, available_cols)
 # Remove NA mappings and create selection
 valid_mapping <- column_mapping[!is.na(column_mapping)]
 cat("✅ Found", length(valid_mapping), "out of", length(required_columns), "required columns\n")
+
+# Convert to data.frame if it's a data.table (MAF returns data.table)
+if (inherits(prad_mutations, "data.table")) {
+  prad_mutations <- as.data.frame(prad_mutations)
+}
 
 # Select available columns
 prad_clean <- prad_mutations[, valid_mapping, drop = FALSE]

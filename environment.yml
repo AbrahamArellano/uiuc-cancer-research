@@ -1,0 +1,152 @@
+name: uiuc-cancer-research
+channels:
+  - pytorch
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # ============================================================================
+  # PYTHON & CORE DEPENDENCIES
+  # ============================================================================
+  - python=3.10
+  - pip>=21.0
+
+  # ============================================================================
+  # DATA PROCESSING & SCIENTIFIC COMPUTING
+  # ============================================================================
+  - numpy>=1.21.0
+  - pandas>=1.3.0
+  - scipy>=1.7.0
+
+  # ============================================================================
+  # MACHINE LEARNING & DEEP LEARNING
+  # ============================================================================
+  - scikit-learn>=1.0.0
+  - pytorch>=1.12.0
+  - cpuonly  # CPU-only PyTorch (remove if GPU available)
+  - xgboost>=1.5.0
+
+  # ============================================================================
+  # VISUALIZATION
+  # ============================================================================
+  - matplotlib>=3.4.0
+  - seaborn>=0.11.0
+  - plotly>=5.0.0
+
+  # ============================================================================
+  # GENOMICS & BIOINFORMATICS TOOLS
+  # ============================================================================
+  # VCF file handling
+  - pysam>=0.19.0
+  - cyvcf2>=0.30.0
+
+  # Ensembl VEP (Variant Effect Predictor)
+  # Note: VEP must be installed manually - see docs/SETUP.md
+
+  # Sequence analysis
+  - biopython>=1.79
+
+  # ============================================================================
+  # DATA DOWNLOAD & API ACCESS
+  # ============================================================================
+  - requests>=2.26.0
+  - urllib3>=1.26.0
+  - paramiko>=2.8.0  # For COSMIC SFTP downloads
+
+  # ============================================================================
+  # UTILITIES
+  # ============================================================================
+  - tqdm>=4.62.0  # Progress bars
+  - click>=8.0.0  # Command-line interface creation
+  - python-dotenv>=0.19.0  # Environment variable management
+  - pyyaml>=5.4.0  # YAML configuration files
+
+  # ============================================================================
+  # DEVELOPMENT & TESTING (Optional but recommended)
+  # ============================================================================
+  - jupyterlab>=3.0.0
+  - ipykernel>=6.0.0
+  - pytest>=6.2.0
+  - black>=21.0  # Code formatting
+  - flake8>=3.9.0  # Linting
+
+  # ============================================================================
+  # PIP-ONLY PACKAGES
+  # ============================================================================
+  - pip:
+      # TabNet (interpretable deep learning)
+      - pytorch-tabnet>=4.0
+
+      # VCF parsing (additional tools)
+      - PyVCF3>=1.0.3
+
+      # Experiment tracking (optional)
+      - mlflow>=1.26.0
+      - wandb>=0.12.0
+
+      # Additional utilities
+      - python-dateutil>=2.8.0
+      - colorama>=0.4.4  # Colored terminal output
+
+      # Data validation
+      - jsonschema>=4.0.0
+
+      # Performance profiling (optional)
+      - memory-profiler>=0.60.0
+
+# ============================================================================
+# INSTALLATION NOTES
+# ============================================================================
+#
+# To create this environment:
+#   conda env create -f environment.yml
+#
+# To activate the environment:
+#   conda activate uiuc-cancer-research
+#
+# To update the environment:
+#   conda env update -f environment.yml --prune
+#
+# To export your current environment:
+#   conda env export > environment.yml
+#
+# ============================================================================
+# CUDA CONFIGURATION
+# ============================================================================
+#
+# If you have a different CUDA version, adjust the pytorch-cuda line:
+#   - For CUDA 11.8: pytorch-cuda=11.8
+#   - For CUDA 12.1: pytorch-cuda=12.1
+#   - For CPU only: remove pytorch-cuda line
+#
+# Check your CUDA version with:
+#   nvidia-smi
+#
+# ============================================================================
+# ENSEMBL VEP SETUP
+# ============================================================================
+#
+# After installing the environment, you need to download VEP cache files:
+#
+# 1. Download VEP cache for GRCh38:
+#    cd $HOME/.vep
+#    wget ftp://ftp.ensembl.org/pub/release-110/variation/vep/homo_sapiens_vep_110_GRCh38.tar.gz
+#    tar xzf homo_sapiens_vep_110_GRCh38.tar.gz
+#
+# 2. The cache files are ~15GB and take 30-60 minutes to download
+#
+# ============================================================================
+# RESOURCE REQUIREMENTS
+# ============================================================================
+#
+# Minimum Requirements:
+#   - RAM: 16 GB
+#   - Disk: 100 GB (for data + models + results)
+#   - GPU: Optional but recommended (NVIDIA with 8GB+ VRAM)
+#
+# Recommended for Full Pipeline:
+#   - RAM: 32 GB
+#   - Disk: 200 GB
+#   - GPU: NVIDIA A100 or H100 (for hyperparameter optimization)
+#
+# ============================================================================

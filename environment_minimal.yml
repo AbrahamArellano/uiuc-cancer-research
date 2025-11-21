@@ -1,0 +1,23 @@
+name: uiuc-cancer-research
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip>=21.0
+
+  # Essential for data downloads
+  - numpy
+  - pandas
+  - requests
+  - urllib3
+  - paramiko  # For COSMIC SFTP
+  - tqdm  # Progress bars
+  - python-dotenv  # For .env file
+
+  # Basic bioinformatics
+  - pysam
+  - biopython
+
+  - pip:
+      - colorama  # Colored output for scripts

@@ -1,0 +1,8 @@
+{
+  "download_date": "2025-11-21T07:18:47.071024",
+  "cosmic_version": "v102",
+  "genome_assembly": "GRCh38",
+  "file_downloaded": "grch38/cosmic/v102/Cosmic_MutantCensus_Tsv_v102_GRCh38.tar",
+  "sha256_checksum": "a28eff3532e73f2fe57fb10ed3ce5780ec578433f7d5db8d0ce7a48a60be9e50",
+  "api_endpoint": "https://cancer.sanger.ac.uk/api/mono/products/v1/downloads/scripted"
+}

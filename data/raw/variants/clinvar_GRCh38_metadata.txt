@@ -1,0 +1,8 @@
+source: ClinVar
+assembly: GRCh38
+download_date: 2025-11-21T06:39:40.902619
+vcf_file: data/raw/variants/clinvar_GRCh38.vcf.gz
+vcf_uncompressed: data/raw/variants/clinvar_GRCh38.vcf
+file_size_mb: 172.98
+sha256: 4cf43e62ff45dd0102400d70e19c4ecafe113f0fdf6fa804c51da2386048aae4
+source_url: https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz

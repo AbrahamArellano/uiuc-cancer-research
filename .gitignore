@@ -1,4 +1,13 @@
-# Python
+# ============================================================================
+# UIUC Cancer Research Project - .gitignore
+# ============================================================================
+# This file prevents sensitive patient data and large files from being
+# committed to version control while preserving directory structure.
+# ============================================================================
+
+# ============================================================================
+# PYTHON
+# ============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,56 +25,288 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environment
+# ============================================================================
+# VIRTUAL ENVIRONMENTS
+# ============================================================================
 venv/
 ENV/
 env/
-.env
+.venv
+.conda/
 
-# IDEs and editors
+# ============================================================================
+# IDES AND EDITORS
+# ============================================================================
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 .DS_Store
+.project
+.pydevproject
+.settings/
 
-# Jupyter Notebook
+# ============================================================================
+# JUPYTER NOTEBOOK
+# ============================================================================
 .ipynb_checkpoints
+*.ipynb
 
-# Project specific
+# ============================================================================
+# ENVIRONMENT VARIABLES (Keep .env.example for documentation)
+# ============================================================================
+.env
+.env.local
+
+# ============================================================================
+# DATA FILES - RAW DATA (Preserve directory structure only)
+# ============================================================================
+
+# COSMIC raw data
+data/raw/variants/*.tsv
+data/raw/variants/*.tsv.gz
+data/raw/variants/*.csv
+data/raw/variants/*.csv.gz
+data/raw/COSMIC/
+
+# ClinVar raw data
+data/raw/variants/*.vcf
+data/raw/variants/*.vcf.gz
+data/raw/variants/*.vcf.idx
+data/raw/variants/*.tbi
+data/raw/clinvar/
+
+# TCGA-PRAD raw data
+data/raw/TCGA-PRAD/
+data/raw/tcga/
+
+# Keep directory structure
 !data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/interim/.gitkeep
-data-models/
+!data/raw/variants/.gitkeep
+
+# ============================================================================
+# DATA FILES - PROCESSED DATA (Exclude all processed patient data)
+# ============================================================================
+
+# Processed variant files
+data/processed/**/*.csv
+data/processed/**/*.tsv
+data/processed/**/*.vcf
+data/processed/**/*.vcf.gz
+data/processed/**/*.pkl
+data/processed/**/*.npy
+data/processed/**/*.npz
+
+# Specific processed directories
+data/processed/cosmic_prostate/
+data/processed/clinvar_prostate/
+data/processed/tcga_prad_prostate/
+data/processed/merged/
+data/processed/merged_vcf/
+data/processed/vep/
+data/processed/tabnet_csv/*.csv
+
+# VEP cache (large annotation database)
 data/processed/vep/vep_cache/
+tools/vep/.vep/
+
+# Keep directory structure
+!data/processed/.gitkeep
+!data/processed/*/.gitkeep
+
+# Exception: Keep small summary/report files for documentation
+!data/processed/**/*_summary.txt
+!data/processed/**/*_report.txt
+!data/processed/**/*_report.md
+
+# ============================================================================
+# DATA FILES - INTERIM DATA
+# ============================================================================
+data/interim/
+!data/interim/.gitkeep
+
+# ============================================================================
+# MODELS (Trained model files can be large)
+# ============================================================================
+models/**/*.pkl
+models/**/*.pth
+models/**/*.h5
+models/**/*.ckpt
+models/**/*.pt
+models/**/*.joblib
+models/**/*.sav
+
+# Keep directory structure and metadata
+!models/.gitkeep
+!models/**/*_metadata.txt
+!models/**/*_config.json
+
+# ============================================================================
+# RESULTS (Exclude large result files, keep summary reports)
+# ============================================================================
+
+# Training results
+results/training/**/*.pkl
+results/training/**/*.csv
+results/training/**/*.npy
+
+# Optimization results
+results/optimization/**/*.pkl
+results/optimization/**/*.csv
+
+# Attention analysis results
+results/attention_analysis/**/*.pkl
+results/attention_analysis/**/*.csv
+results/attention_analysis/**/*.npy
+
+# Metrics
+results/metrics/*.csv
+results/metrics/*.json
+
+# Keep directory structure and final reports
+!results/.gitkeep
+!results/**/.gitkeep
+!results/**/*_report.txt
+!results/**/*_report.md
+!results/**/*_summary.txt
+
+# Keep visualization outputs (usually small PNG/PDF files)
+!results/**/*.png
+!results/**/*.pdf
+!results/**/*.svg
+
+# ============================================================================
+# LOGS (Exclude all log files)
+# ============================================================================
 logs/
 *.log
+*.log.*
+*.out
+*.err
 
-# Large files
+# ============================================================================
+# MEDICAL IMAGING FILES (Large DICOM files)
+# ============================================================================
 *.dcm
+*.dicom
 *.nii
 *.nii.gz
 *.mha
+*.mhd
 *.raw
-*.json
-*.tsv
-*.tsv.gz
-*.csv data/raw/variants/Cosmic_MutantCensus_v102_GRCh38.tsv
-*.vcf
-*.vcf.gz
-data/raw/variants/*.tsv
-data/raw/variants/*.tsv.gz
-data/raw/variants/vcf_GRCh38/clinvar_vcf_GRCh38.vcf
-data/processed/tabnet_csv/prostate_variants_tabnet.csv
-*.vcf
-*.sif
-*.out
-*.err
-data/processed/tabnet_csv/prostate_variants_tabnet_imputed.csv
-data/processed/tabnet_csv/prostate_variants_tabnet_imputed_v1.csv
-data/processed/tabnet_csv/prostate_variants_tabnet_enhanced.csv
-*.csv
+
+# ============================================================================
+# SLURM JOB FILES
+# ============================================================================
+slurm-*.out
+*.slurm
+*.sbatch
+
+# ============================================================================
+# DOWNLOADED DATABASES (Can be re-downloaded)
+# ============================================================================
+data/downloads/
+*.db
+*.sqlite
+*.sqlite3
+
+# AlphaMissense scores (large file, can be re-downloaded)
+data/raw/AlphaMissense_*.tsv.gz
+
+# ============================================================================
+# TEMPORARY FILES
+# ============================================================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+.cache/
+
+# ============================================================================
+# ARCHIVE FILES
+# ============================================================================
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# ============================================================================
+# OS-SPECIFIC
+# ============================================================================
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ============================================================================
+# EXPERIMENT TRACKING (Keep metadata, exclude large artifacts)
+# ============================================================================
+mlruns/
+wandb/
+.tensorboard/
+
+# ============================================================================
+# COMPILED CODE
+# ============================================================================
+*.o
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# ============================================================================
+# DATA VERSIONING
+# ============================================================================
+# Keep data_versions.json for reproducibility tracking
+!data/data_versions.json
+
+# ============================================================================
+# DOCUMENTATION BUILD
+# ============================================================================
+docs/_build/
+docs/.doctrees/
+site/
+
+# ============================================================================
+# PYTEST
+# ============================================================================
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# ============================================================================
+# MYPY
+# ============================================================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============================================================================
+# IMPORTANT: What TO COMMIT
+# ============================================================================
+# ✓ All Python source code (src/, scripts/, config/)
+# ✓ Requirements files (requirements.txt, environment.yml)
+# ✓ Documentation (README.md, docs/*.md)
+# ✓ Configuration templates (config/*_template.py, .env.example)
+# ✓ Small summary/report files (*_summary.txt, *_report.md)
+# ✓ Visualization outputs (*.png, *.pdf)
+# ✓ Directory structure markers (.gitkeep files)
+# ✓ Data versioning metadata (data_versions.json)
+# ✗ Patient data files (*.csv, *.tsv, *.vcf with actual data)
+# ✗ Trained models (*.pkl, *.pth)
+# ✗ Large databases (COSMIC, ClinVar, TCGA raw files)
+# ✗ Logs and temporary files
